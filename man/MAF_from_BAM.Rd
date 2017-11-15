@@ -36,10 +36,9 @@ Note : we strongly recommand to externally recalibrate BAM files using tools lik
    }
 
 }
-\author{
-N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
-}
 \references{
 \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 }
-
+\author{
+N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
+}

@@ -2,11 +2,11 @@
 % Please edit documentation in R/functions.R
 \docType{data}
 \name{positions_ranges}
-\alias{pos_ind}
-\alias{pos_ranges}
-\alias{pos_snp}
 \alias{positions_ranges}
 \alias{positions_ranges.rda}
+\alias{pos_ind}
+\alias{pos_snp}
+\alias{pos_ranges}
 \title{The package provide the positions and ranges computed for the Ion AmpliSeq™ Colon and Lung Cancer Panel v2 as a Rdata file \code{positions_ranges.rda}.}
 \usage{
 data(positions_ranges)
@@ -19,14 +19,13 @@ This file contains 4 variables
   \item \code{pos_ranges}, GRanges object, describing the 92 amplicons of the Ion AmpliSeq™ Colon and Lung Cancer Panel v2
 }
 }
-\author{
-N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
-}
 \references{
 \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 }
 \seealso{
 \code{Prepare_Library}
 }
+\author{
+N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
+}
 \keyword{data}
-

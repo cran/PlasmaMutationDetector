@@ -11,11 +11,10 @@ data(hotspot)
 \description{
 The package provide a list of known hotspot positions located on the amplicons of the Ion AmpliSeq™ Colon and Lung Cancer Panel v2 as a txt file \code{hotspot.txt} which contains a vector of vector of chars, of the form chrN:XXXXXXXXX defining genomic positions.
 }
-\author{
-N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
-}
 \references{
 \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 }
+\author{
+N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
+}
 \keyword{data}
-

@@ -13,6 +13,9 @@
 # release 1.5.0 : remove file.path() and check whether pathnames end properly by a '/' (see # TO RUN UNDER WINDOWS)
 # release 1.5.1 : downsample example to fit the <5s time constraint of the CRAN
 # release 1.5.2 : use Nicolas example to fit the <5s time constraint of the CRAN and add the possibility to use zip BER
+# release 1.6   : adapt the code to accept no large deletion, remove one mistake and simplify code
+# release 1.6.1 : bug introduced during simplifcation fixed
+# release 1.6.2 : bug introduced during simplifcation fixed
 
 # #' @importFrom GenomicRanges GRanges
 #' @importClassesFrom S4Vectors FilterRules
@@ -374,34 +377,42 @@ MAF_from_BAM = function(study.dir='Plasma/',input.filenames=NULL,bai.ext='.bai',
     if (nrow(res)>0) {
       freq = pileupFreq(res)	#read the cleared temporary BAMfile
       contig = freq[which(freq[,'-'] > 0),c(1:9,17,25,33)] #create dataframe for long deletions
+      contig$contig = rep(NA,nrow(contig)) #add a new variable to define starting point of deletion
+      # print(names(contig))
 
-      ### assign the same contig id to deleted positions if they are distant of 3bp and consistently frequent
-      for (i in 1:(nrow(contig)-2))
-        if ( (as.numeric(contig[i,'start']) + 2) == as.numeric(contig[i+2,'start']) )
-          if(abs(contig[i,'-'] - contig[i+2,'-'])/max(contig[i,'-'], contig[i+2,'-']) < 0.2 & abs(contig[i,'-'] - contig[i+1,'-'])/max(contig[i,'-'], contig[i+1,'-']) < 0.2)
-            contig[i:i+2,'contig'] = i
-      ### remove positions with inconsistent deletions (<2bp or different frequency)
-      contig2 = contig[-which(is.na(contig$contig)),]
-
-      if (nrow(contig2)>1)
-        for (i in 1:(nrow(contig2)-1))
-          for (j in 1:(nrow(contig2)-i))
-            if (contig2[i,'contig'] == (contig2[i+j,'contig'] - j) )
-              contig2[i+j,'contig']=contig2[i,'contig']
-
-      for (i in 1:(nrow(contig)-1))
-        if ( i %in% contig2$contig) {
-          contig3 = rbind(contig2[which(contig2$contig == i),][1,],contig2[which(contig2$contig == i),][1,])
-          contig3[1,'start']= as.numeric(contig3[1,'start'])-2
-          contig3[2,'start']= as.numeric(contig3[2,'start'])-1
-          contig2 = rbind(contig2,contig3)
+      # YVES 08/11/2017
+      # A simpler way to find large deletions (>2bp) and assign : YVES 8/11/2017
+      # frequency consistence changes in this version
+      loc = dloc = 1
+      while(loc<nrow(contig)) {
+        while ((loc+dloc<=nrow(contig)) & (as.numeric(contig$start[loc])+dloc==as.numeric(contig$start[loc+dloc])) &
+               (abs(mean(contig[loc+(0:(dloc-1)),'-'])-contig[loc+dloc,'-'])/mean(contig[loc+(0:(dloc-1)),'-']) < 0.2)) dloc = dloc+1
+        dloc = dloc-1 # now dloc is the number of bases with same deletion as loc
+        if (dloc>1) { # found large deletion (>2bp)
+          # print(loc+(0:dloc))
+          # cat(contig$seqnames[loc+(0:dloc)],'\t'); cat(contig$seqnames[loc+dloc+(1:3)],'\n')
+          # cat(contig$start[loc+(0:dloc)],'\t'); cat(contig$start[loc+dloc+(1:3)],'\n')
+          # cat((contig[loc+(1:dloc),'-']-contig[loc,'-'])/contig[loc,'-'],'\t'); cat((contig[loc+dloc+(1:3),'-']-contig[loc,'-'])/contig[loc,'-'],'\n')
+          contig$contig[loc+(0:dloc)] = loc
+          loc = loc+dloc+1
+        } else {
+          loc = loc+1
         }
 
-      contig2[,'chrpos']=paste0(contig2[,'seqnames'],":",contig2[,'start'])
+        dloc = 1
+      }
 
+      ### remove positions with inconsistent deletions (<2bp or different frequency)
+      contig2 = contig[!is.na(contig$contig),]
+
+      contig2$chrpos = rep(NA,nrow(contig2)) # to avoid pb when empty
+
+      if (nrow(contig2)>0) contig2$chrpos=paste0(contig2$seqnames,":",contig2$start)
+
+      # YVES 08/11/2017
       ### A warning to prevent the false duplication of deletions
-      if (length(contig2$chrpos[duplicated(contig2$chrpos)])>0)
-        cat(' !!!!!!! warning  !!!!! duplicates in deletion for sample',bam.files[g],'\n')
+      if (any(duplicated(contig2$chrpos)))
+          cat(' !!!!!!! warning  !!!!! duplicates in deletion for sample',bam.files[g],'\n')
 
     } else {
       contig2 = as.data.frame(matrix(nrow=0,ncol=14))

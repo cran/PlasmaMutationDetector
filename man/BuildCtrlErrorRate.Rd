@@ -34,10 +34,9 @@ INDEL PER is computed as sum in control samples of INDEL background counts / sum
    BuildCtrlErrorRate(ctrl.dir)
 
 }
-\author{
-N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
-}
 \references{
 \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 }
-
+\author{
+N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
+}

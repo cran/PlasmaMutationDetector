@@ -22,14 +22,13 @@ This table contains 9 variables for each genomic position
   \item \code{hotspot}, char, either 'Non-hotspot' or 'Hotspot' depending if the genomic position is known as hotspot or not.
 }
 }
-\author{
-N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
-}
 \references{
 \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 }
 \seealso{
 \code{BuildCtrlErrorRate}
 }
+\author{
+N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
+}
 \keyword{data}
-
