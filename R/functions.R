@@ -16,6 +16,9 @@
 # release 1.6   : adapt the code to accept no large deletion, remove one mistake and simplify code
 # release 1.6.1 : bug introduced during simplifcation fixed
 # release 1.6.2 : bug introduced during simplifcation fixed
+# release 1.6.3 : in BuildCtrlErrorRate, use hotspot file as data.frame 27/11/2017. Now hotspot file should contains a variable name chrpos on the first line
+# release 1.6.4 : save file in tempdir() by default to satisfy CRAN policy e.g. for debian distribution
+# release 1.6.5 : debug 1.6.5
 
 # #' @importFrom GenomicRanges GRanges
 #' @importClassesFrom S4Vectors FilterRules
@@ -27,8 +30,8 @@
 #' @import ggplot2
 #' @import grid
 #' @importFrom graphics abline plot points text
-#' @importFrom stats dnorm integrate median pbinom quantile
-#' @importFrom utils data download.file read.delim read.table write.table
+#' @importFrom stats dnorm integrate median pbinom quantile binom.test
+#' @importFrom utils data download.file read.delim read.table write.table unzip
 #'
 #' @encoding{utf-8}
 
@@ -65,7 +68,7 @@ sbscore = function(refplus, refmin, altplus, altmin) {
 
 minus.logit = function(P) sapply(P,function(x) {if(is.nan(x)||(x<1)) return(-log(x/(1-x))) else return(Inf)})
 
-pvalue = function(E,N=NULL,E0=NULL,N0=NULL,with.info=FALSE) {
+pvalue = function(E,N=NULL,E0=NULL,N0=NULL,with.info=FALSE,use.int=TRUE) {
   # return the pvalue
   if (is.null(N)) {N=E[2]; E0=E[3]; N0=E[4]; E=E[1]}
   if (E0==0) E0=1/sqrt(N0) # provides an upper bound for the p-value by assuming control error rate equals 1/N0^(3/2)
@@ -76,7 +79,8 @@ pvalue = function(E,N=NULL,E0=NULL,N0=NULL,with.info=FALSE) {
     print(sigma0.hat)
   }
   psi = function(y) pbinom(E,N,pmax(pmin(p0.hat-sigma0.hat*y,1),0),lower.tail=F)*dnorm(y)
-  integrate(psi,lower=-30,upper=30,subdivisions=10000L)$value
+  if (use.int) p.val = integrate(psi,lower=-30,upper=30,subdivisions=10000L)$value else p.val = binom.test(E,N,p0.hat,'great')$p.value
+  p.val
 }
 
 
@@ -161,13 +165,14 @@ pileupFreq = function(pileupres) {
 #' @param bed.filename, char, name of a BED table (tab-delimited) describing the Panel (with first 3 columns: "chr" (ex:chr1), "start position" (ex:115252190), "end position" (ex:115252305), i.e. the Ion AmpliSeq™ Colon and Lung Cancer Research Panel v2 (default 'lungcolonV2.bed.txt' as provided in the inst/extdata/Info folder of the package).
 #' @param snp.filename, char, name of the vcf file describing known SNP positions, obtained from ftp://ftp.broadinstitute.org/pub/ExAC_release/release0.3/ExAC.r0.3.sites.vep.vcf.gz (default 'ExAC.r0.3.sites.vep.vcf.gz'). It requires a corresponding TBI file to be in the same folder (obtained from ftp://ftp.broadinstitute.org/pub/ExAC_release/release0.3/ExAC.r0.3.sites.vep.vcf.gz.tbi)
 #' @param snp.extra, a vector of char, a vector of extra known snp positions manually curated (ex:"chrN:XXXXXXXXX")
-#' @param output.name, char, filename to save \code{pos_ind} and \code{pos_snp} in \code{info.dir} (default 'positions_ranges.rda')
+#' @param output.name, char, filename to save \code{pos_ind} and \code{pos_snp} (default 'positions_ranges.rda')
+#' @param output.dir, char, directory where to save \code{pos_ind} and \code{pos_snp} (default \code{info.dir})
 #' @param load.from.broad.insitute, boolean, if TRUE load \code{snp.filename} from Broad Institute ftp server otherwise use the file positions_ranges_broad.rda (default FALSE)
 #' @author N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
 #' @seealso positions_ranges,
 #' @references \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 #'
-#' @return Save the following variables in a .rda file defined by \code{output.name} in the folder defined by \code{info.dir}:
+#' @return Save the following variables in a .rda file defined by \code{output.name} in the folder defined by \code{output.dir}:
 #' \itemize{
 #' \item \code{pos_ranges}, a GRanges descriptor of amplicon positions
 #' \item \code{pos_ind}, a vector of char "chrN:XXXXXXXXX", defining ALL index positions
@@ -178,7 +183,7 @@ pileupFreq = function(pileupres) {
 #'
 #' @examples
 #'    bad.pos = "chr7:15478"
-#'    PrepareLibrary(info.dir='./',snp.extra=bad.pos)
+#'    PrepareLibrary(info.dir='./',snp.extra=bad.pos,output.dir=paste0(tempdir(),'/'))
 #'
 #'
 PrepareLibrary = function(info.dir='Info/',
@@ -186,6 +191,7 @@ PrepareLibrary = function(info.dir='Info/',
                           snp.filename='ExAC.r0.3.sites.vep.vcf.gz', # known snp
                           snp.extra=c("chr4:1807909","chr7:140481511", "chr18:48586344", "chr14:105246474", "chr19:1223055"), # extra snp
                           output.name='positions_ranges.rda',
+                          output.dir=info.dir,
                           load.from.broad.insitute=FALSE
 ) {
 
@@ -231,7 +237,7 @@ PrepareLibrary = function(info.dir='Info/',
   pos_snp = c(pos_snp,snp.extra) # add the SNP positions you want
 
 
-  output.name = paste0(info.dir,output.name)
+  output.name = paste0(output.dir,output.name)
   save(pos_ranges,pos_ind,pos_snp,file=output.name)
   print('File saved in ...')
   return(output.name)
@@ -247,26 +253,27 @@ PrepareLibrary = function(info.dir='Info/',
 #'
 #' @param study.dir, char, name of the folder containing the rBAM directory  (default 'Plasma/'). The typical folder hierarchy will consist of 'Plasma/rBAM'
 #' @param input.filenames, a vector of char (default NULL), the names of the BAM files to process. If NULL all BAM files in the rBAM folder will be processed
-#' @param pos_ranges.file, char, name of the Rdata file containing the three variables \code{pos_ind}, \code{pos_snp} and \code{pos_ranges} as build by the function \code{PrepareLibrary}. Default NULL, use the position_ranges.rda provided, used for our analysis.
 #' @param bai.ext, char, filename extension of the bai files (default '.bai')
+#' @param pos_ranges.file, char, name of the Rdata file containing the three variables \code{pos_ind}, \code{pos_snp} and \code{pos_ranges} as build by the function \code{PrepareLibrary}. Default NULL, use the position_ranges.rda provided, used for our analysis.
 #' @param force, boolean, (default FALSE) if TRUE force all computations to all files including already processed ones
+#' @param output.dir, char, name of the folder to save results  (default \code{study.dir}).
 #' @author N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
 #' @references \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 #'
-#' @return the number of processed bam files
+#' @return the path/names of the MAF files
 #'
 #' @export MAF_from_BAM
 #'
 #' @examples
-#'    \dontrun{
+#'   \dontrun{
 #'      ctrl.dir = system.file("extdata", "4test_only/ctrl/", package = "PlasmaMutationDetector")
 #'      if (substr(ctrl.dir,nchar(ctrl.dir),nchar(ctrl.dir))!='/')
 #'        ctrl.dir = paste0(ctrl.dir,'/') # TO RUN UNDER WINDOWS
-#'      MAF_from_BAM(ctrl.dir,force=TRUE)
+#'      MAF_from_BAM(ctrl.dir,force=TRUE,output.dir=paste0(tempdir(),'/'))
 #'    }
 #'
 MAF_from_BAM = function(study.dir='Plasma/',input.filenames=NULL,bai.ext='.bai',
-                        pos_ranges.file=NULL,force=FALSE) {
+                        pos_ranges.file=NULL,force=FALSE,output.dir=study.dir) {
 
   pos_ind = pos_snp = pos_ranges = NULL
 
@@ -278,12 +285,13 @@ MAF_from_BAM = function(study.dir='Plasma/',input.filenames=NULL,bai.ext='.bai',
   }
 
   ######## Input/Output folders
-  bam.dir = paste0(study.dir,'rBAM/')        # Folder with BAM files and BAI index files
-  ber.dir = paste0(study.dir,'BER/')         # Folder for Background Error Rate files extracted from BAM files
-  if (!dir.exists(ber.dir)) dir.create(ber.dir)
+  bam.dir = paste0(study.dir,'rBAM/')        # Folder for BAM files and BAI index files
+  ber.dir = paste0(study.dir,'BER/')         # Default folder for BER files
+  ber.outdir = paste0(output.dir,'BER/')     # Folder to save Background Error Rate files extracted from BAM files
+  if (!dir.exists(ber.outdir)) dir.create(ber.outdir)
 
   ######## pileup parameters
-  pileup.param = PileupParam(max_depth=100000, min_base_quality=20, min_mapq=5, min_nucleotide_depth=1, min_minor_allele_depth=0,
+  pileup.param = PileupParam(max_depth=100000, min_base_quality=20, min_mapq=5, min_nucleotide_depth=1, min_minor_allele_depth=0, # min_base_quality=20, min_mapq=5
                              distinguish_strands=TRUE, distinguish_nucleotides=TRUE, ignore_query_Ns=TRUE, include_deletions=TRUE,
                              include_insertions=TRUE)
 
@@ -297,16 +305,36 @@ MAF_from_BAM = function(study.dir='Plasma/',input.filenames=NULL,bai.ext='.bai',
 
   if (length(bam.files)==0) stop(paste('STOP ::: no bam file found ... NOTE: bam files need to be in a subdirectory called rBAM'))
 
+  ber.files = rep(NA,length(bam.files))
+
   for( g in 1:length(bam.files)){
 
     bam.name = bam.files[g]
     bai.name = gsub('.bam$',bai.ext,bam.name)
-    ber.name = gsub(bam.dir,ber.dir,gsub('.bam$','_MAF.txt',bam.name),fixed=TRUE)
-    berzip.name = paste0(ber.name,'.zip')
+    ber.name = gsub(bam.dir,ber.dir,gsub('.bam$','_MAF.txt',bam.name),fixed=TRUE) # local BER
+    berzip.name = paste0(ber.name,'.zip') # local zip BER
+    ber.outname = gsub(bam.dir,ber.outdir,gsub('.bam$','_MAF.txt',bam.name),fixed=TRUE) # BER to create
+    berzip.outname = paste0(ber.outname,'.zip') # BER to create in zip version
 
-    if (!force & file.exists(ber.name)) next()
+    ber.files[g] = ber.outname
+
+    if (!force & file.exists(ber.name)) {
+      ber.files[g] = ber.name
+      next()
+    }
+    if (!force & file.exists(ber.outname)) {
+      ber.files[g] = ber.outname
+      next()
+    }
+
     if (!force & file.exists(berzip.name)) {
-      write.table(readLines(unz(berzip.name,rev(strsplit(ber.name,'/')[[1]])[1])),file=ber.name,sep=' ',row.names=FALSE,col.names=FALSE,quote=FALSE)
+      ber.files[g] = unzip(zipfile=berzip.name,exdir=ber.outdir)
+      # write.table(readLines(unz(berzip.name,rev(strsplit(ber.name,'/')[[1]])[1])),file=ber.outname,sep=' ',row.names=FALSE,col.names=FALSE,quote=FALSE)
+      next()
+    }
+    if (!force & file.exists(berzip.outname)) {
+      ber.files[g] = ber.files[g] = unzip(zipfile=berzip.outname,exdir=ber.outdir)
+      # write.table(readLines(unz(berzip.outname,rev(strsplit(ber.name,'/')[[1]])[1])),file=ber.outname,sep=' ',row.names=FALSE,col.names=FALSE,quote=FALSE)
       next()
     }
 
@@ -469,10 +497,10 @@ MAF_from_BAM = function(study.dir='Plasma/',input.filenames=NULL,bai.ext='.bai',
     select[,'longINDEL'] = apply(select[,c('longdel','longins')],1,max)
 
     ### save ber.file
-    write.table(select[!duplicated(select$chrpos),], file=ber.name, row.names=FALSE, col.names=TRUE) ####  save temporary files
+    write.table(select[!duplicated(select$chrpos),], file=ber.outname, row.names=FALSE, col.names=TRUE) ####  save temporary files
   }
 
-  return(length(bam.files))
+  return(ber.files)
 
 }
 
@@ -489,6 +517,7 @@ MAF_from_BAM = function(study.dir='Plasma/',input.filenames=NULL,bai.ext='.bai',
 #' @param pos_ranges.file, char, name of the Rdata file containing the three variables \code{pos_ind}, \code{pos_snp} and \code{pos_ranges} as build by the function \code{PrepareLibrary}. Default NULL, use the position_ranges.rda provided, used for our analysis.
 #' @param hotspot.file, char, name of the text file containing a list of the genomic positions of the hotspots (default NULL, read the provide hotspot.txt, see \code{hotspot})
 #' @param force, boolean, (default FALSE) if TRUE force all computations to all files including already processed ones
+#' @param output.dir, char, name of the folder to save results (default \code{ctrl.dir}).
 #' @author N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
 #' @references \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 #'
@@ -497,13 +526,15 @@ MAF_from_BAM = function(study.dir='Plasma/',input.filenames=NULL,bai.ext='.bai',
 #' @export BuildCtrlErrorRate
 #'
 #' @examples
+#' \dontrun{
 #'    ctrl.dir = system.file("extdata", "4test_only/ctrl/", package = "PlasmaMutationDetector")
 #'    if (substr(ctrl.dir,nchar(ctrl.dir),nchar(ctrl.dir))!='/')
 #'      ctrl.dir = paste0(ctrl.dir,'/') # TO RUN UNDER WINDOWS
-#'    BuildCtrlErrorRate(ctrl.dir)
+#'    BuildCtrlErrorRate(ctrl.dir,output.dir=paste0(tempdir(),'/'))
+#'    }
 #'
 BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.file=NULL,hotspot.file=NULL,
-                              force=FALSE) {
+                              force=FALSE,output.dir=ctrl.dir) {
 
   ### read position informations
   pos_snp = pos_ind = NULL
@@ -520,17 +551,20 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
     data(hotspot,envir=environment())
   } else {
     if (!file.exists(hotspot.file)) stop(paste('STOP :::',hotspot.file,'does not exist'))
-    hotspot = read.delim(hotspot.file, header=FALSE)
+    hotspot = read.delim(hotspot.file, header=TRUE) # YVES 27/11/2017 FALSE -> TRUE
+    if (!any(colnames(hotspot)=='chrpos')) stop(paste('STOP :::',hotspot.file,'has to contain a variable named chrpos (defined on first line)'))
   }
 
   ### extract counts from all BAM files found in ctrl.dir
-  MAF_from_BAM(study.dir=ctrl.dir,input.filenames=NULL,bai.ext=bai.ext,pos_ranges.file=pos_ranges.file,force=force)
+  ctrl.files =  MAF_from_BAM(study.dir=ctrl.dir,input.filenames=NULL,bai.ext=bai.ext,pos_ranges.file=pos_ranges.file,force=force,output.dir=output.dir)
 
-  ### list Background-Error-Rate files
-  ctrl.files = dir(paste0(ctrl.dir,'BER'), pattern="*.txt$", full.names=TRUE) # list all Background Error Rate files
+  print(ctrl.files)
+
+  # ### list Background-Error-Rate files
+  # ctrl.files = dir(paste0(ctrl.dir,'BER'), pattern="*.txt$", full.names=TRUE) # list all Background Error Rate files # before 1.6.5
 
   ### Assemble background errors from control samples
-  X = read.table(ctrl.files[1], header=T, sep=" ")
+  X = read.table(ctrl.files[1], header=TRUE, sep=" ")
   if (length(ctrl.files)>1) ind.g = 2:length(ctrl.files) else ind.g = c(1,1) # just for testing purpose with one bam
   for (g in ind.g)
     X = merge(read.table(ctrl.files[g],header=T,sep=" "), X, by="chrpos", all=TRUE)
@@ -544,11 +578,24 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
   X = X[(X[,1] %in% pos_ind),] #### ensure to select positions in defined genomic ranges
   X = X[!(X[,1] %in% pos_snp),] #### ensure to remove SNP positions and background error rate for SNPs (E0) and INDELS (E0indel) in samples
 
+  # print(X[X$chrpos=='chr6:170530538',])
+  # print(X[X$chrpos=='chr10:39080921',])
+
   X.col = colnames(X)
   col.cov = grep('cov',X.col) # column indexes of the coverture
   col.del = grep('longdel($|[^_])',X.col) # column indexes of the longdel
   col.ins = grep('longins($|[^_])',X.col) # column indexes of the longins
   col.maj = grep('^maj',X.col) # column indexes of the major
+
+  #### Check for good coverage
+  # not.good.coverage = apply(X[,col.cov],1,function(x) which(is.na(x)))
+  # print(not.good.coverage[1:3])
+  # for (i in 1:length(not.good.coverage))
+  #   if (length(not.good.coverage[[i]])>0) {
+  #     print(paste('PROBLEM at positions',X$chrpos[i],'in MAF/BER :'))
+  #     print(not.good.coverage[[i]])
+  #     print(ctrl.files[not.good.coverage[[i]]])
+  #   }
 
   sum.no.na = function(x) sum(x,na.rm=TRUE)
   q95 = function(x) quantile(x,0.95,na.rm=TRUE)
@@ -573,10 +620,13 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
 
   # Precise what are the hotspot positions
   background_error_rate$hotspot <- 'Non-hotspot'
-  background_error_rate[which(background_error_rate$chrpos %in% hotspot$V1 ),'hotspot'] = 'Hotspot'
+  background_error_rate[which(background_error_rate$chrpos %in% hotspot$chrpos ),'hotspot'] = 'Hotspot'
 
   # Save Background error file...
-  write.table(background_error_rate, file=paste0(ctrl.dir,"background_error_rate.txt"), row.names=FALSE, col.names=TRUE)
+  backround_error_file = paste0(output.dir,"background_error_rate.txt")
+  print('Backround error rate saved in ...')
+  print(paste0('... ',backround_error_file))
+  write.table(background_error_rate, file=backround_error_file, row.names=FALSE, col.names=TRUE)
 
   return(length(ctrl.files))
 }
@@ -597,12 +647,14 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
 #' @param ber.ctrl.file, char, pathname of the file providing the background error rates obtained from the controls (default NULL use the provided background error rates obtained from our 29 controls). See \code{background_error_rate.txt} data and \code{BuildCtrlErrorRate} function.
 #' @param bai.ext, char, filename extension of the bai files (default '.bai')
 #' @param n.trim, integer, number of base positions trimmed at the ends of each amplicon (default 8)
+#' @param cov.min, integer, minimal coverture required at each position (default 0)
 #' @param force, boolean, (default FALSE) if TRUE force all computations to all files including already processed ones
 #' @param show.more, boolean, (default FALSE show only detected positions) if TRUE additional annotations on result plots are given for non-significant mutations
 #' @param qcutoff.snv, numeric, proportion of kept base positions ranged by increasing 95th percentile SNV PER in control samples (default 0.95)
 #' @param qcutoff.indel, numeric, proportion of kept base positions ranged by increasing 95th percentile INDEL PER in control samples (default 0.99)
 #' @param cutoff.sb.hotspot, numeric, exclude variants on hotspot positions with Symmetric Odds Ratio test > cutoff (default 3.1) (see Supplementary Materials in References)
 #' @param cutoff.sb.nonhotspot, numeric, exclude variants on non-hotspot positions with Symmetric Odds Ratio test > cutoff (default 2.5) (see Supplementary Materials in References)
+#' @param output.dir, char, name of the folder to save results  (default \code{patient.dir}).
 #' @author N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
 #' @references \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 #'
@@ -614,12 +666,13 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
 #'      patient.dir=system.file("extdata","4test_only/case/",package="PlasmaMutationDetector")
 #'      if (substr(patient.dir,nchar(patient.dir),nchar(patient.dir))!='/')
 #'        patient.dir = paste0(patient.dir,'/') # TO RUN UNDER WINDOWS
-#'      DetectPlasmaMutation(patient.dir)
+#'      DetectPlasmaMutation(patient.dir,output.dir=paste0(tempdir(),'/'))
 #'
 #'
 DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.file=NULL,ber.ctrl.file=NULL,bai.ext='.bai',
-                               n.trim=8,force=FALSE,show.more=FALSE,
-                               qcutoff.snv=0.95,qcutoff.indel=0.99,cutoff.sb.hotspot=3.1,cutoff.sb.nonhotspot=2.5) {
+                               n.trim=8,cov.min=0,force=FALSE,show.more=FALSE,
+                               qcutoff.snv=0.95,qcutoff.indel=0.99,cutoff.sb.hotspot=3.1,cutoff.sb.nonhotspot=2.5,
+                               output.dir=patient.dir) {
 
   ### read background error rate
   background_error_rate = NULL
@@ -658,27 +711,35 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
     background_error_rate[which(background_error_rate$indel.up.sain > quantile(background_error_rate$indel.up.sain,qcutoff.indel) ),'chrpos']
 
   ### extract counts from BAM files
-  MAF_from_BAM(study.dir=patient.dir,input.filenames=patient.name,bai.ext=bai.ext,pos_ranges.file=pos_ranges.file,force=force)
+  patient.files = MAF_from_BAM(study.dir=patient.dir,input.filenames=patient.name,bai.ext=bai.ext,pos_ranges.file=pos_ranges.file,force=force,output.dir=output.dir)
 
-  if (is.null(patient.name)) patient.files = dir(paste0(patient.dir,'BER'), pattern="*_MAF.txt$", full.names=TRUE) # list all Background Error Rate files
-  else patient.files = paste0(patient.dir,'BER/',gsub('.bam$','_MAF.txt',patient.name))
+#  print(patient.files)
 
-  patient.results = paste0(patient.dir,'Results/')
+  # # before 1.6.5
+  # if (is.null(patient.name)) patient.files = dir(paste0(patient.dir,'BER/'), pattern="*_MAF.txt$", full.names=TRUE) # list all Background Error Rate files
+  # else patient.files = paste0(output.dir,'BER/',gsub('.bam$','_MAF.txt',patient.name))
+
+  patient.results = paste0(output.dir,'Results/')
   if (!dir.exists(patient.results)) dir.create(patient.results)
 
   for (i in 1:length(patient.files)) {
 
-    patient.name = patient.files[i]
+    print(paste('Detecting mutations from', patient.files[i]))
 
-    print(paste('Detecting mutations from',patient.name))
+    patient.name = rev(strsplit(patient.files[i],'/')[[1]])[1]
 
-    patient.pdf = gsub('_MAF.txt$','.pdf',gsub('BER/','Results/',patient.name))
-    patient.hit = gsub('_MAF.txt$','_infos.txt',gsub('BER/','Results/',patient.name))
-    patient.mut = gsub('_MAF.txt$','_MUT.txt',gsub('BER/','Results/',patient.name))
+    patient.pdf = gsub('_MAF.txt$','.pdf',paste0(patient.results,patient.name))
+    patient.hit = gsub('_MAF.txt$','_infos.txt',paste0(patient.results,patient.name))
+    patient.mut = gsub('_MAF.txt$','_MUT.txt',paste0(patient.results,patient.name))
+
+    # # before 1.6.5
+    # patient.pdf = gsub('_MAF.txt$','.pdf',gsub(paste0(patient.dir,'BER/'),patient.results,patient.name))
+    # patient.hit = gsub('_MAF.txt$','_infos.txt',gsub(paste0(patient.dir,'BER/'),patient.results,patient.name))
+    # patient.mut = gsub('_MAF.txt$','_MUT.txt',gsub(paste0(patient.dir,'BER/'),patient.results,patient.name))
 
     if ((!force & file.exists(patient.hit)) && (file.size(patient.hit)>0)) next()
 
-    sample = read.table(patient.name, header=T, sep="") ### read sample counts
+    sample = read.table(patient.files[i], header=T, sep="") ### read sample counts
     samplenoise = merge(sample, background_error_rate, by="chrpos", all=FALSE) ### merge control and sample counts
 
     depth = mean(samplenoise$cov,na.rm=T)
@@ -770,6 +831,9 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
     samplenoise[which(type.snv & samplenoise$chrpos %in% noisy.snv ), 'hprob'] = NA
     samplenoise[which(!type.snv & samplenoise$chrpos %in% noisy.indel), 'hprob'] = NA
 
+    # # Remove positions without coverture
+    # samplenoise[which(samplenoise$cov>cov.min), 'hprob'] = NA
+
     samplenoise = samplenoise[-which(is.na(samplenoise$hprob)),]
 
     type.snv = (samplenoise$type == 'SNV')
@@ -787,7 +851,7 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
       pboxplot = samplenoise[which(samplenoise$hprob %in% sort(samplenoise$hprob, decreasing=FALSE)[1:250]),]
       pboxplot$logp = sapply(pboxplot$hprob, minus.logit)
 
-      write.table(pboxplot$logp,file = 'pboxplot_hprob_tmp.txt',col.names = F,row.names = F)
+      # write.table(pboxplot$logp,file = 'pboxplot_hprob_tmp.txt',col.names = F,row.names = F)
 
       xx = rownames(pboxplot)[which(pboxplot$logp %in% robustbase::adjbox(pboxplot$logp[is.finite(pboxplot$logp)], plot=F)$out == T &
                                       pboxplot$logp > median(pboxplot$logp))]
@@ -901,7 +965,7 @@ NULL
 #' @references \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 NULL
 
-#' The package provide a list of known hotspot positions located on the amplicons of the Ion AmpliSeq™ Colon and Lung Cancer Panel v2 as a txt file \code{hotspot.txt} which contains a vector of vector of chars, of the form chrN:XXXXXXXXX defining genomic positions.
+#' The package provide a list of known hotspot positions located on the amplicons of the Ion AmpliSeq™ Colon and Lung Cancer Panel v2 as a txt file \code{hotspot.txt} which contains a vector/variable ---named chrpos (first row)--- of chars, of the form chrN:XXXXXXXXX defining genomic positions.
 #'
 #
 #' @docType data

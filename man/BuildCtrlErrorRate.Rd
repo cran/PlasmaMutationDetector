@@ -5,7 +5,8 @@
 \title{function BuildCtrlErrorRate}
 \usage{
 BuildCtrlErrorRate(ctrl.dir = "Plasma ctrl/", bai.ext = ".bai",
-  pos_ranges.file = NULL, hotspot.file = NULL, force = FALSE)
+  pos_ranges.file = NULL, hotspot.file = NULL, force = FALSE,
+  output.dir = ctrl.dir)
 }
 \arguments{
 \item{ctrl.dir, }{char, foldername containing the control files (default 'Plasma ctrl/'). The typical folder hierarchy will consist of 'Plasma ctrl/rBAM'}
@@ -17,6 +18,8 @@ BuildCtrlErrorRate(ctrl.dir = "Plasma ctrl/", bai.ext = ".bai",
 \item{hotspot.file, }{char, name of the text file containing a list of the genomic positions of the hotspots (default NULL, read the provide hotspot.txt, see \code{hotspot})}
 
 \item{force, }{boolean, (default FALSE) if TRUE force all computations to all files including already processed ones}
+
+\item{output.dir, }{char, name of the folder to save results (default \code{ctrl.dir}).}
 }
 \value{
 the number of processed files
@@ -28,10 +31,12 @@ SNV PER is computed as the sum in control samples of SNV background counts / sum
 INDEL PER is computed as sum in control samples of INDEL background counts / sum in control samples of depths where INDEL background counts = sum of insertion and deletion counts.
 }
 \examples{
+\dontrun{
    ctrl.dir = system.file("extdata", "4test_only/ctrl/", package = "PlasmaMutationDetector")
    if (substr(ctrl.dir,nchar(ctrl.dir),nchar(ctrl.dir))!='/')
      ctrl.dir = paste0(ctrl.dir,'/') # TO RUN UNDER WINDOWS
-   BuildCtrlErrorRate(ctrl.dir)
+   BuildCtrlErrorRate(ctrl.dir,output.dir=paste0(tempdir(),'/'))
+   }
 
 }
 \references{

@@ -1,2 +1,0 @@
-Genomic pos	Mutation type	Base ref	Base mut	Allelic freq	hotspot	p-value
-chr7:55259515	SNV	T	G	0.0765342960288809	Hotspot	9.54271261888897e-277

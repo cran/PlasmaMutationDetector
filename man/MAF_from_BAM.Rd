@@ -5,7 +5,8 @@
 \title{function MAF_from_BAM}
 \usage{
 MAF_from_BAM(study.dir = "Plasma/", input.filenames = NULL,
-  bai.ext = ".bai", pos_ranges.file = NULL, force = FALSE)
+  bai.ext = ".bai", pos_ranges.file = NULL, force = FALSE,
+  output.dir = study.dir)
 }
 \arguments{
 \item{study.dir, }{char, name of the folder containing the rBAM directory  (default 'Plasma/'). The typical folder hierarchy will consist of 'Plasma/rBAM'}
@@ -17,9 +18,11 @@ MAF_from_BAM(study.dir = "Plasma/", input.filenames = NULL,
 \item{pos_ranges.file, }{char, name of the Rdata file containing the three variables \code{pos_ind}, \code{pos_snp} and \code{pos_ranges} as build by the function \code{PrepareLibrary}. Default NULL, use the position_ranges.rda provided, used for our analysis.}
 
 \item{force, }{boolean, (default FALSE) if TRUE force all computations to all files including already processed ones}
+
+\item{output.dir, }{char, name of the folder to save results  (default \code{study.dir}).}
 }
 \value{
-the number of processed bam files
+the path/names of the MAF files
 }
 \description{
 Read BAM files  and create MAF file. BAMfiles are stored in a sub-folder '/rBAM'.
@@ -28,11 +31,11 @@ MAF files contain the raw counts of A,T,C,G, insertion, deletion, insertion>2bp,
 Note : we strongly recommand to externally recalibrate BAM files using tools like GATK.
 }
 \examples{
-   \dontrun{
+  \dontrun{
      ctrl.dir = system.file("extdata", "4test_only/ctrl/", package = "PlasmaMutationDetector")
      if (substr(ctrl.dir,nchar(ctrl.dir),nchar(ctrl.dir))!='/')
        ctrl.dir = paste0(ctrl.dir,'/') # TO RUN UNDER WINDOWS
-     MAF_from_BAM(ctrl.dir,force=TRUE)
+     MAF_from_BAM(ctrl.dir,force=TRUE,output.dir=paste0(tempdir(),'/'))
    }
 
 }

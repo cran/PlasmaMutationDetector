@@ -6,9 +6,9 @@
 \usage{
 DetectPlasmaMutation(patient.dir = "./", patient.name = NULL,
   pos_ranges.file = NULL, ber.ctrl.file = NULL, bai.ext = ".bai",
-  n.trim = 8, force = FALSE, show.more = FALSE, qcutoff.snv = 0.95,
-  qcutoff.indel = 0.99, cutoff.sb.hotspot = 3.1,
-  cutoff.sb.nonhotspot = 2.5)
+  n.trim = 8, cov.min = 0, force = FALSE, show.more = FALSE,
+  qcutoff.snv = 0.95, qcutoff.indel = 0.99, cutoff.sb.hotspot = 3.1,
+  cutoff.sb.nonhotspot = 2.5, output.dir = patient.dir)
 }
 \arguments{
 \item{patient.dir, }{char, foldername containing the rBAM folder of the patients. The typical folder hierarchy will consist of 'Plasma/rBAM'}
@@ -23,6 +23,8 @@ DetectPlasmaMutation(patient.dir = "./", patient.name = NULL,
 
 \item{n.trim, }{integer, number of base positions trimmed at the ends of each amplicon (default 8)}
 
+\item{cov.min, }{integer, minimal coverture required at each position (default 0)}
+
 \item{force, }{boolean, (default FALSE) if TRUE force all computations to all files including already processed ones}
 
 \item{show.more, }{boolean, (default FALSE show only detected positions) if TRUE additional annotations on result plots are given for non-significant mutations}
@@ -34,6 +36,8 @@ DetectPlasmaMutation(patient.dir = "./", patient.name = NULL,
 \item{cutoff.sb.hotspot, }{numeric, exclude variants on hotspot positions with Symmetric Odds Ratio test > cutoff (default 3.1) (see Supplementary Materials in References)}
 
 \item{cutoff.sb.nonhotspot, }{numeric, exclude variants on non-hotspot positions with Symmetric Odds Ratio test > cutoff (default 2.5) (see Supplementary Materials in References)}
+
+\item{output.dir, }{char, name of the folder to save results  (default \code{patient.dir}).}
 }
 \value{
 the number of processed patients
@@ -49,7 +53,7 @@ Position-Error Rates stored in a file specified in \code{ber.ctrl.file}.
      patient.dir=system.file("extdata","4test_only/case/",package="PlasmaMutationDetector")
      if (substr(patient.dir,nchar(patient.dir),nchar(patient.dir))!='/')
        patient.dir = paste0(patient.dir,'/') # TO RUN UNDER WINDOWS
-     DetectPlasmaMutation(patient.dir)
+     DetectPlasmaMutation(patient.dir,output.dir=paste0(tempdir(),'/'))
 
 
 }

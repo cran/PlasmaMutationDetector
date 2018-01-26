@@ -7,7 +7,8 @@
 PrepareLibrary(info.dir = "Info/", bed.filename = "lungcolonV2.bed.txt",
   snp.filename = "ExAC.r0.3.sites.vep.vcf.gz", snp.extra = c("chr4:1807909",
   "chr7:140481511", "chr18:48586344", "chr14:105246474", "chr19:1223055"),
-  output.name = "positions_ranges.rda", load.from.broad.insitute = FALSE)
+  output.name = "positions_ranges.rda", output.dir = info.dir,
+  load.from.broad.insitute = FALSE)
 }
 \arguments{
 \item{info.dir, }{char, name of the folder containing the library information files (default 'Info/')}
@@ -18,12 +19,14 @@ PrepareLibrary(info.dir = "Info/", bed.filename = "lungcolonV2.bed.txt",
 
 \item{snp.extra, }{a vector of char, a vector of extra known snp positions manually curated (ex:"chrN:XXXXXXXXX")}
 
-\item{output.name, }{char, filename to save \code{pos_ind} and \code{pos_snp} in \code{info.dir} (default 'positions_ranges.rda')}
+\item{output.name, }{char, filename to save \code{pos_ind} and \code{pos_snp} (default 'positions_ranges.rda')}
+
+\item{output.dir, }{char, directory where to save \code{pos_ind} and \code{pos_snp} (default \code{info.dir})}
 
 \item{load.from.broad.insitute, }{boolean, if TRUE load \code{snp.filename} from Broad Institute ftp server otherwise use the file positions_ranges_broad.rda (default FALSE)}
 }
 \value{
-Save the following variables in a .rda file defined by \code{output.name} in the folder defined by \code{info.dir}:
+Save the following variables in a .rda file defined by \code{output.name} in the folder defined by \code{output.dir}:
 \itemize{
 \item \code{pos_ranges}, a GRanges descriptor of amplicon positions
 \item \code{pos_ind}, a vector of char "chrN:XXXXXXXXX", defining ALL index positions
@@ -37,7 +40,7 @@ positions_ranges.rda file provided within the package. It is provided to be able
 }
 \examples{
    bad.pos = "chr7:15478"
-   PrepareLibrary(info.dir='./',snp.extra=bad.pos)
+   PrepareLibrary(info.dir='./',snp.extra=bad.pos,output.dir=paste0(tempdir(),'/'))
 
 
 }
