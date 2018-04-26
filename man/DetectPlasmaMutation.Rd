@@ -7,8 +7,9 @@
 DetectPlasmaMutation(patient.dir = "./", patient.name = NULL,
   pos_ranges.file = NULL, ber.ctrl.file = NULL, bai.ext = ".bai",
   n.trim = 8, cov.min = 0, force = FALSE, show.more = FALSE,
-  qcutoff.snv = 0.95, qcutoff.indel = 0.99, cutoff.sb.hotspot = 3.1,
-  cutoff.sb.nonhotspot = 2.5, output.dir = patient.dir)
+  qcutoff.snv = 0.95, qcutoff.indel = 0.99, cutoff.sb.ref = 0.1,
+  cutoff.sb.hotspot = 3.1, cutoff.sb.nonhotspot = 2.5,
+  hotspot.indel = "chr7:55227950:55249171", output.dir = patient.dir)
 }
 \arguments{
 \item{patient.dir, }{char, foldername containing the rBAM folder of the patients. The typical folder hierarchy will consist of 'Plasma/rBAM'}
@@ -33,9 +34,13 @@ DetectPlasmaMutation(patient.dir = "./", patient.name = NULL,
 
 \item{qcutoff.indel, }{numeric, proportion of kept base positions ranged by increasing 95th percentile INDEL PER in control samples (default 0.99)}
 
-\item{cutoff.sb.hotspot, }{numeric, exclude variants on hotspot positions with Symmetric Odds Ratio test > cutoff (default 3.1) (see Supplementary Materials in References)}
+\item{cutoff.sb.ref, }{numeric, exclude reference positions without cutoff < strand bias < 1-cutoff (default 0.1) (see Supplementary Materials in References)}
 
-\item{cutoff.sb.nonhotspot, }{numeric, exclude variants on non-hotspot positions with Symmetric Odds Ratio test > cutoff (default 2.5) (see Supplementary Materials in References)}
+\item{cutoff.sb.hotspot, }{numeric, exclude hotspot positions with Symmetric Odds Ratio test > cutoff (default 3.1) (see Supplementary Materials in References)}
+
+\item{cutoff.sb.nonhotspot, }{numeric, exclude non-hotspot positions with Symmetric Odds Ratio test > cutoff (default 2.5) (see Supplementary Materials in References)}
+
+\item{hotspot.indel, }{char, a vector containing the known positions of hotspot deletion/insertion defined as chrX:start:end (default 'chr7:55227950:55249171')}
 
 \item{output.dir, }{char, name of the folder to save results  (default \code{patient.dir}).}
 }

@@ -1,8 +1,8 @@
-b89b6535ca95f000a851224a7b9293d0 *DESCRIPTION
+bf85bd9ff8d927c0d224d22bc299c453 *DESCRIPTION
 9aae110e72ac781cd7369a55cef4bc81 *LICENSE
 146a26bfebec0f5b88acdf24c35571a0 *NAMESPACE
-d48ca9012eb88fdb4dd5948493b3f1e9 *R/functions.R
-04a14a43324e051a10db69256d5c16a6 *data/background_error_rate.txt.gz
+7f8ba17f2bcc2a43a93a236b1f57db8b *R/functions.R
+0bf7ce02fe8d941f5ae0b6642360b822 *data/background_error_rate.txt.gz
 1e907f6e12e071b7086b30c1b856727d *data/hotspot.txt.gz
 fdebddcb14e949005410dd0d4e603ea6 *data/positions_ranges.rda
 2ea06c5586dc664eb06263938e041fb8 *inst/extdata/4test_only/case/BER/case1.chr7_MAF.txt
@@ -13,9 +13,11 @@ a8c628b209f319b12f90f4f33fc8e598 *inst/extdata/4test_only/ctrl/BER/ctrl1-downsam
 6c864d112e8c38972701760a8dda725b *inst/extdata/4test_only/ctrl/rBAM/ctrl1-downsample-05.bam.bai
 ec579dc1c23477742ed8c5615c721405 *inst/extdata/Info/lungcolonV2.bed.txt
 dfdd27b7a0839c9782e3cfa175a5be30 *man/BuildCtrlErrorRate.Rd
-c7322329a35a8abfefe00d6ad57091cc *man/DetectPlasmaMutation.Rd
+e474c2e6538a92777a0b3744b7482fdc *man/DetectPlasmaMutation.Rd
+49aa42d5a32d3341291b022f3d0c0996 *man/LoadBackgroundErrorRate.Rd
 dd493b3c303e7e6fce728f09e5a314ad *man/MAF_from_BAM.Rd
 5a8680e3cfac152b97da6bfa40cc90b6 *man/PrepareLibrary.Rd
+9f0665e88a2db505520c63f4be7e4f23 *man/UpperPart.Rd
 2dde7cbbb026ad81b3da9aba8ed99e63 *man/background_error_rate.Rd
 fc0e676c78d059faf595c48a76786ba3 *man/hotspot.Rd
 c75097dff3f58b4b3e4468921743f01e *man/positions_ranges.Rd

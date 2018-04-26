@@ -18,7 +18,8 @@
 # release 1.6.2 : bug introduced during simplifcation fixed
 # release 1.6.3 : in BuildCtrlErrorRate, use hotspot file as data.frame 27/11/2017. Now hotspot file should contains a variable name chrpos on the first line
 # release 1.6.4 : save file in tempdir() by default to satisfy CRAN policy e.g. for debian distribution
-# release 1.6.5 : debug 1.6.5
+# release 1.6.5 : debug 1.6.4
+# release 1.7.0 : take care of mutations showing allele frequency larger than 50% // clean the code
 
 # #' @importFrom GenomicRanges GRanges
 #' @importClassesFrom S4Vectors FilterRules
@@ -66,7 +67,9 @@ sbscore = function(refplus, refmin, altplus, altmin) {
   log( rmM(refplus,refmin)/rmM(altplus,altmin) * (z+1/z) )
 }
 
-minus.logit = function(P) sapply(P,function(x) {if(is.nan(x)||(x<1)) return(-log(x/(1-x))) else return(Inf)})
+minus.logit = function(P) {
+  sapply(P,function(x) {if (!is.nan(x)&(x<1)) return(-log(x/(1-x))) else return(-Inf)})
+  }
 
 pvalue = function(E,N=NULL,E0=NULL,N0=NULL,with.info=FALSE,use.int=TRUE) {
   # return the pvalue
@@ -86,32 +89,32 @@ pvalue = function(E,N=NULL,E0=NULL,N0=NULL,with.info=FALSE,use.int=TRUE) {
 
 find.outliers = function(P,chr.pos,thr.R=6.5,thr.P=0.000001,with.info=FALSE) {
 
-  logit = function(P) sapply(P,function(x) if(is.nan(x)||(x<1)) return(log(x/(1-x))) else return(Inf))
-
-  P[which(P==1)]=0.999999999
+  P[which(P==1)]=0.9999999999 ### just to have finite values
+  P[which(P==0)]=0.0000000001 ### just to have finite values
   nP = length(P)
   names(P) = chr.pos
-  L.tri = sort(-logit(P))
-  L.tri[L.tri==Inf] = 10*max(L.tri[L.tri!=Inf])
+  L.tri = sort(minus.logit(P))
   dL = diff(L.tri);
-  L.tri.short=L.tri[-1];
-  L.moy=L.tri[-nP];
-  L.moy=sign(L.moy)*(abs(L.moy))^0.5
-  Ratio = dL/L.moy
-  outliers = which((Ratio>thr.R)&(L.tri.short>-logit(thr.P)))
+  L.right = L.tri[-1];
+  L.left = L.tri[-nP];
+  sL.sqrt=sign(L.left)*(abs(L.left))^0.5 # to take the square root without changing the sign
+  Ratio = dL/sL.sqrt
+  outliers = which( Ratio>thr.R & L.right>minus.logit(thr.P))
 
   ### ADD YVES 29/03/2016
-  if (length(outliers)>0) outliers = which(L.tri.short>=min(L.tri.short[min(outliers)]))
+  # if (length(outliers)>0) outliers = which(L.right>=min(L.right[min(outliers)]))
 
   ind = names(outliers)
-  if (with.info) {
-    plot(L.tri[-1][L.moy>0],Ratio[L.moy>0],col=1)
-    abline(v=-logit(thr.P),col='red'); abline(h=thr.R,col='green'); abline(h=6,col='cyan'); abline(h=7,col='violet');
-    if (length(outliers)>0) outliers = which(L.tri.short>=min(L.tri.short[min(outliers)]))
-    if (length(outliers)>0) points(L.tri[-1][outliers],Ratio[outliers],col='red',pch='x')
-    if (length(outliers)>0) text(L.tri[-1][outliers],Ratio[outliers],labels=ind,cex=0.6,pos=2,col=1)
+
+  if (with.info) { ### just for debugging purpose. Not used.
+    plot(L.tri[-1][L.left>0],Ratio[L.left>0],col=1)
+    abline(v=minus.logit(thr.P),col='red'); abline(h=thr.R,col='green'); abline(h=6,col='cyan'); abline(h=7,col='violet');
+    # if (length(outliers)>0) outliers = which(L.right>=min(L.right[min(outliers)]))
+    if (length(outliers)>0) points(L.right[outliers],Ratio[outliers],col='red',pch='x')
+    if (length(outliers)>0) text(L.right[outliers],Ratio[outliers],labels=ind,cex=0.6,pos=2,col=1)
     if (length(outliers)>0) print(sort(P,decreasing=T)[outliers+1])
   }
+
   ind
 }
 
@@ -350,10 +353,10 @@ MAF_from_BAM = function(study.dir='Plasma/',input.filenames=NULL,bai.ext='.bai',
     bf = BamFile(bam.name, index=bai.name)
 
     ### Import, count, index, filter, sort, and merge BAM
-    ft = scanBam(bf, scanBamParam=ScanBamParam(which=pos_ranges, what=scanBamWhat()),pileupParam=pileup.param)
+    ft = scanBam(bf, scanBamParam=ScanBamParam(which=pos_ranges, what=scanBamWhat()), pileupParam=pileup.param)
 
     ### Count SNV from the BAM file
-    res = pileup(bf, scanBamParam=ScanBamParam(which=pos_ranges, what=scanBamWhat()),pileupParam=pileup.param)
+    res = pileup(bf, scanBamParam=ScanBamParam(which=pos_ranges, what=scanBamWhat()), pileupParam=pileup.param)
 
     ### Call function pileupFreq to get a data.frame of counts
     freq = pileupFreq(res)
@@ -536,6 +539,7 @@ MAF_from_BAM = function(study.dir='Plasma/',input.filenames=NULL,bai.ext='.bai',
 BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.file=NULL,hotspot.file=NULL,
                               force=FALSE,output.dir=ctrl.dir) {
 
+
   ### read position informations
   pos_snp = pos_ind = NULL
   if (is.null(pos_ranges.file)) {
@@ -565,19 +569,30 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
 
   ### Assemble background errors from control samples
   X = read.table(ctrl.files[1], header=TRUE, sep=" ")
-  if (length(ctrl.files)>1) ind.g = 2:length(ctrl.files) else ind.g = c(1,1) # just for testing purpose with one bam
-  for (g in ind.g)
-    X = merge(read.table(ctrl.files[g],header=T,sep=" "), X, by="chrpos", all=TRUE)
 
-  ### Few controls to be sure ... useless???
-  if (anyDuplicated(X$chrpos)) {
-    cat( "!!!!! Warning !!!! Duplicated genomic positions in controls ... remove duplicated positions" )
-    X = X[!duplicated(X$chrpos),]
+  ### utility function
+  ATGC.ind = which(colnames(X) %in% c('A','T','G','C'))
+  ATGC = colnames(X)[ATGC.ind]
+  fct.MAJ = function(X) {
+    data.frame(chrpos=as.character(X$chrpos),REF=apply(X,1,function(x) ATGC[which(x[ATGC.ind]==x['maj'])[1]]))
   }
 
-  X = X[(X[,1] %in% pos_ind),] #### ensure to select positions in defined genomic ranges
-  X = X[!(X[,1] %in% pos_snp),] #### ensure to remove SNP positions and background error rate for SNPs (E0) and INDELS (E0indel) in samples
+  # extract main variant = genome ref
+  MAJ = fct.MAJ(X)
 
+  if (length(ctrl.files)>1) ind.g = 2:length(ctrl.files) else ind.g = 1 # just for testing purpose with one bam
+  for (g in ind.g) {
+    Y = read.table(ctrl.files[g],header=T,sep=" ")
+    X = merge(Y,X,by="chrpos",all=TRUE,suffixes=c(as.character(g),''))
+    MAJ = merge(fct.MAJ(Y),MAJ,by='chrpos',all=TRUE,suffixes=c(as.character(g),''))
+  }
+
+  ok = (X$chrpos %in% pos_ind)
+  not.ok = (X$chrpos %in% pos_snp)
+  X = X[ok,] #### ensure to select positions in defined genomic ranges
+  X = X[!not.ok,] #### ensure to remove SNP positions and background error rate for SNPs (E0) and INDELS (E0indel) in samples
+  MAJ = MAJ[ok,]
+  MAJ = MAJ[!not.ok,]
   # print(X[X$chrpos=='chr6:170530538',])
   # print(X[X$chrpos=='chr10:39080921',])
 
@@ -604,22 +619,27 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
   E0 = apply(X[,col.cov]-X[,col.maj],1,sum.no.na) # Sum of the SNV background counts of all control samples for each position
 
   X = X[which(!is.na(N0) | N0 > 5000),]  # Remove genomic positions which are not covered in all control samples or with sum of depths < 5,000x
+  MAJ = MAJ[which(!is.na(N0) | N0 > 5000),]
+
+  REF = apply(MAJ,1,function(x) names(which.max(table(as.character(x[-1])))))
+  MAJ$the.ref = REF
+  write.table(MAJ, file='MAJ.txt', row.names=FALSE, col.names=TRUE)
 
   ### SNV rates
   p.sain = E0/N0 # Control SNV Position-Error Rate
   up.sain = apply((X[,col.cov]-X[,col.maj])/X[,col.cov],1,q95) # 95th percentile for Control SNV Position-Error Rate
 
   ### INDEL rates
-  E0indel= apply(cbind(X[,col.del], X[,col.ins]),1,sum.no.na) # Sum of the INDEL background counts of all control samples for each position
+  E0indel = apply(cbind(X[,col.del], X[,col.ins]),1,sum.no.na) # Sum of the INDEL background counts of all control samples for each position
   indel.p.sain = E0indel/N0 # Control INDEL Position-Error Rate
   indel.up.sain = apply((X[,col.del] + X[,col.ins]) / X[,col.cov], 1, q95) # 95th percentile for Control INDEL Position-Error Rate
 
   # Joint dataframe containing Control SNV and INDEL Position-Error Rate together with their 95th percentile, and the raw counts data
-  chrpos = as.character(X[,'chrpos'])
-  background_error_rate <- data.frame(cbind(chrpos,N0,E0,p.sain,up.sain,E0indel,indel.p.sain,indel.up.sain))
+  chrpos = as.character(X$chrpos)
+  background_error_rate = data.frame(cbind(chrpos,N0,E0,p.sain,up.sain,E0indel,indel.p.sain,indel.up.sain,REF))
 
   # Precise what are the hotspot positions
-  background_error_rate$hotspot <- 'Non-hotspot'
+  background_error_rate$hotspot = 'Non-hotspot'
   background_error_rate[which(background_error_rate$chrpos %in% hotspot$chrpos ),'hotspot'] = 'Hotspot'
 
   # Save Background error file...
@@ -632,48 +652,19 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
 }
 
 
-
-#' function DetectPlasmaMutation
+#' function LoadBackgroundErrorRate
 #'
-#' This is the main function of the package that calls mutations by comparing at each genomic position the SNV or INDEL frequencies computed in one tested sample to
-#' the SNV or INDEL Position-Error Rates computed from several control samples by a binomial test. An outlier detection is performed among all intra-sample p-values
-#' to call a mutation.
-#' For users wishing to develop their own analysis for other sequencing panel, it requires recalibrated BAM files control samples to be processed to compute the
-#' Position-Error Rates stored in a file specified in \code{ber.ctrl.file}.
+#' This function will load the background error rates created from the controls using the function BuildCtrlErrorRate
 #'
-#' @param patient.dir, char, foldername containing the rBAM folder of the patients. The typical folder hierarchy will consist of 'Plasma/rBAM'
-#' @param patient.name, char, filename of the patient .bam file(s) (default NULL read all patients in folder \code{patient.dir})
 #' @param pos_ranges.file, char, name of the Rdata file containing the three variables \code{pos_ind}, \code{pos_snp}, \code{pos_ranges} as build by the function \code{PrepareLibrary}. Default NULL, use the position_ranges.rda provides that we used for our analysis.
 #' @param ber.ctrl.file, char, pathname of the file providing the background error rates obtained from the controls (default NULL use the provided background error rates obtained from our 29 controls). See \code{background_error_rate.txt} data and \code{BuildCtrlErrorRate} function.
-#' @param bai.ext, char, filename extension of the bai files (default '.bai')
 #' @param n.trim, integer, number of base positions trimmed at the ends of each amplicon (default 8)
-#' @param cov.min, integer, minimal coverture required at each position (default 0)
-#' @param force, boolean, (default FALSE) if TRUE force all computations to all files including already processed ones
-#' @param show.more, boolean, (default FALSE show only detected positions) if TRUE additional annotations on result plots are given for non-significant mutations
-#' @param qcutoff.snv, numeric, proportion of kept base positions ranged by increasing 95th percentile SNV PER in control samples (default 0.95)
-#' @param qcutoff.indel, numeric, proportion of kept base positions ranged by increasing 95th percentile INDEL PER in control samples (default 0.99)
-#' @param cutoff.sb.hotspot, numeric, exclude variants on hotspot positions with Symmetric Odds Ratio test > cutoff (default 3.1) (see Supplementary Materials in References)
-#' @param cutoff.sb.nonhotspot, numeric, exclude variants on non-hotspot positions with Symmetric Odds Ratio test > cutoff (default 2.5) (see Supplementary Materials in References)
-#' @param output.dir, char, name of the folder to save results  (default \code{patient.dir}).
 #' @author N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
 #' @references \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
 #'
-#' @return the number of processed patients
+#' @return the adapted background error rate
 #'
-#' @export DetectPlasmaMutation
-#'
-#' @examples
-#'      patient.dir=system.file("extdata","4test_only/case/",package="PlasmaMutationDetector")
-#'      if (substr(patient.dir,nchar(patient.dir),nchar(patient.dir))!='/')
-#'        patient.dir = paste0(patient.dir,'/') # TO RUN UNDER WINDOWS
-#'      DetectPlasmaMutation(patient.dir,output.dir=paste0(tempdir(),'/'))
-#'
-#'
-DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.file=NULL,ber.ctrl.file=NULL,bai.ext='.bai',
-                               n.trim=8,cov.min=0,force=FALSE,show.more=FALSE,
-                               qcutoff.snv=0.95,qcutoff.indel=0.99,cutoff.sb.hotspot=3.1,cutoff.sb.nonhotspot=2.5,
-                               output.dir=patient.dir) {
-
+LoadBackgroundErrorRate = function(pos_ranges.file,ber.ctrl.file,n.trim) {
   ### read background error rate
   background_error_rate = NULL
   if (is.null(ber.ctrl.file)) {
@@ -703,22 +694,81 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
   }
 
   background_error_rate = subset(background_error_rate,chrpos %in% pos_ind)
+  background_error_rate
+}
 
-  ####### Identify positions with 95th percentile SNV and INDEL Position-Error Rates (SNV-PER and INDEL-PER)
-  ####### larger than cut-off
-  noisy.snv = background_error_rate[which(background_error_rate$up.sain > quantile(background_error_rate$up.sain, qcutoff.snv)),'chrpos']
-  noisy.indel =
-    background_error_rate[which(background_error_rate$indel.up.sain > quantile(background_error_rate$indel.up.sain,qcutoff.indel) ),'chrpos']
+#' function UpperPart
+#'
+#' Find the locations inside a set of values higher than an upper quantile of these values
+#'
+#' @param values, numeric, the set of values
+#' @param q, the upper quantile
+#'
+#' @return the indices of the highest values, larger than the given quantile
+#'
+UpperPart = function(values,q) {
+  noisy = which(values > quantile(values,q))
+  noisy
+}
+
+
+#' function DetectPlasmaMutation
+#'
+#' This is the main function of the package that calls mutations by comparing at each genomic position the SNV or INDEL frequencies computed in one tested sample to
+#' the SNV or INDEL Position-Error Rates computed from several control samples by a binomial test. An outlier detection is performed among all intra-sample p-values
+#' to call a mutation.
+#' For users wishing to develop their own analysis for other sequencing panel, it requires recalibrated BAM files control samples to be processed to compute the
+#' Position-Error Rates stored in a file specified in \code{ber.ctrl.file}.
+#'
+#' @param patient.dir, char, foldername containing the rBAM folder of the patients. The typical folder hierarchy will consist of 'Plasma/rBAM'
+#' @param patient.name, char, filename of the patient .bam file(s) (default NULL read all patients in folder \code{patient.dir})
+#' @param pos_ranges.file, char, name of the Rdata file containing the three variables \code{pos_ind}, \code{pos_snp}, \code{pos_ranges} as build by the function \code{PrepareLibrary}. Default NULL, use the position_ranges.rda provides that we used for our analysis.
+#' @param ber.ctrl.file, char, pathname of the file providing the background error rates obtained from the controls (default NULL use the provided background error rates obtained from our 29 controls). See \code{background_error_rate.txt} data and \code{BuildCtrlErrorRate} function.
+#' @param bai.ext, char, filename extension of the bai files (default '.bai')
+#' @param n.trim, integer, number of base positions trimmed at the ends of each amplicon (default 8)
+#' @param cov.min, integer, minimal coverture required at each position (default 0)
+#' @param force, boolean, (default FALSE) if TRUE force all computations to all files including already processed ones
+#' @param show.more, boolean, (default FALSE show only detected positions) if TRUE additional annotations on result plots are given for non-significant mutations
+#' @param qcutoff.snv, numeric, proportion of kept base positions ranged by increasing 95th percentile SNV PER in control samples (default 0.95)
+#' @param qcutoff.indel, numeric, proportion of kept base positions ranged by increasing 95th percentile INDEL PER in control samples (default 0.99)
+#' @param cutoff.sb.ref, numeric, exclude reference positions without cutoff < strand bias < 1-cutoff (default 0.1) (see Supplementary Materials in References)
+#' @param cutoff.sb.hotspot, numeric, exclude hotspot positions with Symmetric Odds Ratio test > cutoff (default 3.1) (see Supplementary Materials in References)
+#' @param cutoff.sb.nonhotspot, numeric, exclude non-hotspot positions with Symmetric Odds Ratio test > cutoff (default 2.5) (see Supplementary Materials in References)
+#' @param hotspot.indel, char, a vector containing the known positions of hotspot deletion/insertion defined as chrX:start:end (default 'chr7:55227950:55249171')
+#' @param output.dir, char, name of the folder to save results  (default \code{patient.dir}).
+#' @author N. Pécuchet, P. Laurent-Puig and Y. Rozenholc
+#' @references \emph{Analysis of base-position error rate of next-generation sequencing to detect tumor mutations in circulating DNA} N. Pécuchet, Y. Rozenholc, E. Zonta, D. Pietraz, A. Didelot, P. Combe, L. Gibault, J-B. Bachet, V. Taly, E. Fabre, H. Blons, P. Laurent-Puig in \emph{Clinical Chemistry}
+#'
+#' @return the number of processed patients
+#'
+#' @export DetectPlasmaMutation
+#'
+#' @examples
+#'      patient.dir=system.file("extdata","4test_only/case/",package="PlasmaMutationDetector")
+#'      if (substr(patient.dir,nchar(patient.dir),nchar(patient.dir))!='/')
+#'        patient.dir = paste0(patient.dir,'/') # TO RUN UNDER WINDOWS
+#'      DetectPlasmaMutation(patient.dir,output.dir=paste0(tempdir(),'/'))
+#'
+#'
+DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.file=NULL,ber.ctrl.file=NULL,bai.ext='.bai',
+                               n.trim=8,cov.min=0,force=FALSE,show.more=FALSE,
+                               qcutoff.snv=0.95,qcutoff.indel=0.99,
+                               cutoff.sb.ref=0.1,cutoff.sb.hotspot=3.1,cutoff.sb.nonhotspot=2.5,
+                               hotspot.indel='chr7:55227950:55249171',output.dir=patient.dir) {
+
+  ### read and adapt background error rate
+  background_error_rate = LoadBackgroundErrorRate(pos_ranges.file,ber.ctrl.file,n.trim)
+
+  ### Identify the so-called noisy SNV and INDEL genomic positions having background error rate higher than an upper quantile.
+  ### Quantiles are defined by the cut-off qcutoff.snv and qcutoff.indel
+  noisy.snv = background_error_rate[UpperPart(background_error_rate$up.sain, qcutoff.snv),'chrpos']
+  noisy.indel = background_error_rate[UpperPart(background_error_rate$indel.up.sain,qcutoff.indel),'chrpos']
 
   ### extract counts from BAM files
-  patient.files = MAF_from_BAM(study.dir=patient.dir,input.filenames=patient.name,bai.ext=bai.ext,pos_ranges.file=pos_ranges.file,force=force,output.dir=output.dir)
+  patient.files = MAF_from_BAM(study.dir=patient.dir,input.filenames=patient.name,bai.ext=bai.ext,
+                               pos_ranges.file=pos_ranges.file,force=force,output.dir=output.dir)
 
-#  print(patient.files)
-
-  # # before 1.6.5
-  # if (is.null(patient.name)) patient.files = dir(paste0(patient.dir,'BER/'), pattern="*_MAF.txt$", full.names=TRUE) # list all Background Error Rate files
-  # else patient.files = paste0(output.dir,'BER/',gsub('.bam$','_MAF.txt',patient.name))
-
+  ### directory for the results
   patient.results = paste0(output.dir,'Results/')
   if (!dir.exists(patient.results)) dir.create(patient.results)
 
@@ -727,183 +777,194 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
     print(paste('Detecting mutations from', patient.files[i]))
 
     patient.name = rev(strsplit(patient.files[i],'/')[[1]])[1]
-
     patient.pdf = gsub('_MAF.txt$','.pdf',paste0(patient.results,patient.name))
     patient.hit = gsub('_MAF.txt$','_infos.txt',paste0(patient.results,patient.name))
     patient.mut = gsub('_MAF.txt$','_MUT.txt',paste0(patient.results,patient.name))
 
-    # # before 1.6.5
-    # patient.pdf = gsub('_MAF.txt$','.pdf',gsub(paste0(patient.dir,'BER/'),patient.results,patient.name))
-    # patient.hit = gsub('_MAF.txt$','_infos.txt',gsub(paste0(patient.dir,'BER/'),patient.results,patient.name))
-    # patient.mut = gsub('_MAF.txt$','_MUT.txt',gsub(paste0(patient.dir,'BER/'),patient.results,patient.name))
+    if ((!force & file.exists(patient.hit)) && (file.size(patient.hit)>0)) next() # already processed go to next
 
-    if ((!force & file.exists(patient.hit)) && (file.size(patient.hit)>0)) next()
-
+    ### Load patient file
     sample = read.table(patient.files[i], header=T, sep="") ### read sample counts
-    samplenoise = merge(sample, background_error_rate, by="chrpos", all=FALSE) ### merge control and sample counts
+    sample = sample[which(!is.na(sample$MA)),] ### remove positions which haven't been read
+    depth = mean(sample$cov,na.rm=T)
 
-    depth = mean(samplenoise$cov,na.rm=T)
+    ### Find colums of interest
+    ATGC.ind = which(colnames(sample) %in% c('A','T','G','C'))
+    ATGC = colnames(sample)[ATGC.ind]
+    INDEL.ind = which(colnames(sample) %in% c('longdel','longins'))
+    INDEL = colnames(sample)[INDEL.ind]
 
-    samplenoise = samplenoise[which(!is.na(samplenoise$MA)),] ### remove positions which haven't been read (by mistake)
+    ### merge control and sample counts
+    samplenoise = merge(sample, background_error_rate, by="chrpos", all=FALSE)
+
+    ### local function made out of samplenoise
+    FindColumn = function(i,cols.ind,col.ref,col.names=NULL){
+      ind = which(samplenoise[i,cols.ind]==samplenoise[i,col.ref])[1]
+      if (is.null(col.names)) {
+        ind = cols.ind[ind]
+      } else{
+        ind = col.names[ind]
+      }
+      ind
+    }
 
     ### Compute p-values
     samplenoise$probSNV = apply(cbind(c2n(samplenoise$MA),c2n(samplenoise$cov),c2n(samplenoise$E0),c2n(samplenoise$N0)),1, pvalue) # for SNV
     samplenoise$probINDEL = apply(cbind(c2n(samplenoise$longINDEL),c2n(samplenoise$cov),c2n(samplenoise$E0indel),c2n(samplenoise$N0)),1, pvalue) # for INDEL
 
-    ## At each position, decipher the most significant alteration between SNV, DELETION>2bp or INSERTION>2bp
-    ### Use SNV reference as default values:
+    ### At each position, start by using SNV reference as default values:
     samplenoise[,'type'] = 'SNV'
     samplenoise[,'hprob'] = samplenoise[,'probSNV']
-    ### Correct the non SNV that is the INDEL:
+    ### Identify the REFERENCE allele and the mutated allele:
+    for (q in 1:nrow(samplenoise)) {
+      samplenoise$Baseref[q] = FindColumn(q,ATGC.ind,'maj',ATGC)
+      samplenoise$Basemut[q] = FindColumn(q,ATGC.ind,'MA',ATGC)
+      # ### 1.7.0 : to deal with tumoral fraction higher than 50%
+      if (as.character(samplenoise$Basemut[q])==as.character(samplenoise$REF[q])) {
+        samplenoise$Basemut[q] = as.character(samplenoise$Baseref[q])
+        samplenoise$Baseref[q] = as.character(samplenoise$REF[q])
+        samplenoise$probSNV[q] = pvalue(c2n(samplenoise$maf[q]),c2n(samplenoise$cov[q]),c2n(samplenoise$E0[q]),c2n(samplenoise$N0[q]))
+      }
+    }
+
+    ### Correct the INDEL that is the non SNV
     is.INDEL = (samplenoise$probINDEL < samplenoise$probSNV)
+    ### Decipher the most significant alteration between SNV, DELETION>2bp or INSERTION>2bp
     is.longins = (samplenoise$longins > samplenoise$longdel)
     samplenoise[which(is.INDEL & is.longins),'type'] = "insertion"
     samplenoise[which(is.INDEL & !is.longins),'type'] = "deletion"
     samplenoise[which(is.INDEL),'hprob'] = samplenoise[which(is.INDEL),'probINDEL']
 
-    ATGC = colnames(samplenoise)[4:7]
-    INDEL = colnames(samplenoise)[c(41,46)]
-
-    ## At each position, compute Strand Bias scores
+    ### At each position, compute Strand Bias scores for ref, major variant and indel
     for (q in 1:nrow(samplenoise)) {
-      samplenoise[q,'SBsnv'] = max(samplenoise[q,paste0(sub("\\..*", "\\1",ATGC[samplenoise[q,4:7]==samplenoise[q,'MA']]),"_SB")])
-      samplenoise[q,'SBindel'] = max(samplenoise[q,paste0(sub("\\..*", "\\1",INDEL[samplenoise[q,c(41,46)]==samplenoise[q,'longINDEL']]),"_SB")])
-      samplenoise[q,'SBref'] = max(samplenoise[q,paste0(sub("\\..*", "\\1",ATGC[samplenoise[q,4:7]==samplenoise[q,'maj']]),"_SB")])
+      ### compute reference strand bias
+      samplenoise[q,'SBref'] = samplenoise[q,paste0(samplenoise[q,'Baseref'],"_SB")]
+      refplus = samplenoise[q,paste0(samplenoise[q,'Baseref'],'_plus')]
+      refmin = samplenoise[q,paste0(samplenoise[q,'Baseref'],'_minus')]
 
-      ### strand bias scores
-      ref = ATGC[which.max(samplenoise[q,4:7])]
-      refplus = samplenoise[q,paste0(ref,'_plus')]
-      refmin = samplenoise[q,paste0(ref,'_minus')]
-
-      # strand bias score for major alteration
+      ### compute strand bias scores ...
+      ### ... for major alteration
       if (samplenoise[q,'type']=='SNV') {
-        alt = ATGC[samplenoise[q,4:7]==samplenoise[q,'MA']][1]
-        altplus = samplenoise[q,paste0(alt,'_plus')]
-        altmin = samplenoise[q,paste0(alt,'_minus')]
+        altplus = samplenoise[q,paste0(samplenoise[q,'Basemut'],'_plus')]
+        altmin = samplenoise[q,paste0(samplenoise[q,'Basemut'],'_minus')]
         samplenoise[q,'SBscoreSNV'] = sbscore(refplus, refmin, altplus, altmin)
-        samplenoise[q,'hSB'] = samplenoise[q,'SBsnv']
+        samplenoise[q,'hSB'] = samplenoise[q,paste0(samplenoise[q,'Basemut'],"_SB")] # WAS samplenoise[q,'SBsnv']
       }
 
-      # strand bias score for INDEL
+      ### ... for INDEL
       if (samplenoise[q,'type']!='SNV') {
         altplus = samplenoise[q,paste0(samplenoise[q,'type'],'_plus')]
         altmin = samplenoise[q,paste0(samplenoise[q,'type'],'_minus')]
         samplenoise[q,'SBscoreINDEL'] = sbscore(refplus, refmin, altplus, altmin)
-        samplenoise[q,'hSB'] = samplenoise[q,'SBindel']
+        samplenoise[q,'hSB'] = samplenoise[q,paste0(FindColumn(q,INDEL.ind,'longINDEL',INDEL),"_SB")] # WAS samplenoise[q,'SBindel']
       }
+
     }
 
-    #### Used for results plots, identify the REFERENCE allele, the mutated allele if SNV, the deletion length, the insertion, and the strand biais of the alteration
-    for (p in 1:nrow(samplenoise)) {
-      samplenoise[p,'Baseref']=paste0(sub("\\..*", "\\1",ATGC[samplenoise[p,4:7]==samplenoise[p,'maj']]), collapse='')
-      samplenoise[p,'Basemut']=paste0(sub("\\..*", "\\1",ATGC[samplenoise[p,4:7]==samplenoise[p,'MA']]), collapse='')
-    }
+    ### Correction for graphical outputs
+    ### Correct the insertions
     samplenoise[which(samplenoise$type=='insertion'),'Baseref'] = 'INS'
     samplenoise[which(samplenoise$type=='insertion'),'Basemut'] = '>2N'
 
-    # Gather consecutive deletions>2bp (sharing the same contig number) into one unique large deletion
+    ### Correct the deletions: length and strand biais
+    ### Need to gather consecutive deletions>2bp (sharing the same contig number) into one unique large deletion table
     ind.deletion = which(samplenoise$type=='deletion')
     if (length(ind.deletion)>0) {
       deletion = samplenoise[ind.deletion,]
       for (z in unique(deletion$contig)) {
-        deletion$Baseref <- 'DEL'
+        deletion$Baseref = 'DEL'
         bool = (deletion$contig==z)
         ind = which(bool)
         if (length(ind)>0) {
-          deletion[ind,'Basemut'] <- c2n(max(deletion[ind,][[3]])) + 1 - c2n(min(deletion[ind,][[3]])) # gives the number of deleted bp
-          deletion[ind,'hprob'] <- min(deletion[ind,'probINDEL']) # retains the most significant p-value (p.INDEL) on the large deletion
-          deletion[ind,'SBscoreINDEL'] <- min(deletion[ind,'SBscoreINDEL']) # retains the lowest Symmetric Odds Ratio Test on the large deletion
-          deletion[which(bool & deletion$chrpos %in% noisy.indel),'hprob'] <- NA
+          deletion[ind,'Basemut'] = c2n(max(deletion[ind,][[3]])) + 1 - c2n(min(deletion[ind,][[3]])) # gives the number of deleted bp
+          deletion[ind,'hprob'] = min(deletion[ind,'probINDEL']) # retains the most significant p-value (p.INDEL) on the large deletion
+          deletion[ind,'SBscoreINDEL'] = min(deletion[ind,'SBscoreINDEL']) # retains the lowest Symmetric Odds Ratio Test on the large deletion
+          deletion[which(bool & deletion$chrpos %in% noisy.indel),'hprob'] = NA
         }
       }
       deletion = deletion[which(deletion$Basemut!=1),] #ensure that no deletion is <3bp
       samplenoise = rbind(samplenoise[-which(samplenoise$type=='deletion'),], deletion[!duplicated(deletion$contig),])
     }
 
+    ### Remove positions with reference showing outlier strand bias
+    samplenoise[which(samplenoise$SBref > 1-cutoff.sb.ref | samplenoise$SBref < cutoff.sb.ref), 'hprob'] = NA
 
-    samplenoise[which(samplenoise$SBref > 0.90 | samplenoise$SBref < 0.10), 'hprob'] = NA # Remove positions with extreme strand biais on reference allele
-    samplenoise[which(samplenoise$SBscoreSNV > cutoff.sb.hotspot), 'hprob'] = NA # SNV Symmetric Odds Ratio Test cut-off = 3.1
-    samplenoise[which(samplenoise$SBscoreINDEL > cutoff.sb.hotspot), 'hprob'] = NA # INDEL Symmetric Odds Ratio Test cut-off = 3.1
-    samplenoise[which((samplenoise$hotspot=="Non-hotspot") & (samplenoise$SBscoreSNV > cutoff.sb.nonhotspot)), 'hprob'] = NA # More stringent Symmetric Odds Ratio Test cut-off to remove non-hotspot SNV
+    ### Remove positions showing too high strand bias score (Symmetric Odds Ratio Test)
+    samplenoise[which(samplenoise$SBscoreINDEL > cutoff.sb.hotspot), 'hprob'] = NA # for INDEL
+    samplenoise[which((samplenoise$hotspot=="Hotspot") & (samplenoise$SBscoreSNV > cutoff.sb.hotspot)), 'hprob'] = NA # for SNV in hotspot
+    samplenoise[which((samplenoise$hotspot=="Non-hotspot") & (samplenoise$SBscoreSNV > cutoff.sb.nonhotspot)), 'hprob'] = NA # for SNV in non-hotspot
 
-    # Remove positions with high 95th percentile Control SNV Position-Error Rate and Control INDEL Position-Error Rate
+    ### Remove positions showing 5% highest background error rate in SNV or in INDEL
     type.snv = (samplenoise$type == 'SNV')
     samplenoise[which(type.snv & samplenoise$chrpos %in% noisy.snv ), 'hprob'] = NA
     samplenoise[which(!type.snv & samplenoise$chrpos %in% noisy.indel), 'hprob'] = NA
 
-    # # Remove positions without coverture
-    # samplenoise[which(samplenoise$cov>cov.min), 'hprob'] = NA
-
+    ### keep non removed positions (hprob not NA)
     samplenoise = samplenoise[-which(is.na(samplenoise$hprob)),]
-
     type.snv = (samplenoise$type == 'SNV')
-    ind = which(type.snv)
-    samplenoise[ind,'Freq'] = samplenoise[ind,'MA']/samplenoise[ind,'cov'] # compute the frequency of the mutation
-    ind = which(!type.snv)
-    samplenoise[ind,'Freq'] = samplenoise[ind,'longINDEL']/samplenoise[ind,'cov'] # compute the frequency of the mutation
-    Freq4plot = substr(paste(samplenoise$Freq), 0, 6) # keep 3 decimal for the frequency of the mutation
 
-    outlier = 0
+    ### compute the frequency of the mutation
+    samplenoise[type.snv,'Freq'] = samplenoise[type.snv,'MA']/samplenoise[type.snv,'cov']
+    samplenoise[!type.snv,'Freq'] = samplenoise[!type.snv,'longINDEL']/samplenoise[!type.snv,'cov']
+
+    ### First outlier detection
     samplenoise$outlier="no"
-
-    # 1.Hotspots on the smallest p-values
-    if (nrow(samplenoise)>10) {
-      pboxplot = samplenoise[which(samplenoise$hprob %in% sort(samplenoise$hprob, decreasing=FALSE)[1:250]),]
-      pboxplot$logp = sapply(pboxplot$hprob, minus.logit)
-
-      # write.table(pboxplot$logp,file = 'pboxplot_hprob_tmp.txt',col.names = F,row.names = F)
-
-      xx = rownames(pboxplot)[which(pboxplot$logp %in% robustbase::adjbox(pboxplot$logp[is.finite(pboxplot$logp)], plot=F)$out == T &
-                                      pboxplot$logp > median(pboxplot$logp))]
-      xxx = rownames(pboxplot[which(pboxplot$hprob<0.05),])
-      xxxx = rownames(pboxplot[which((pboxplot$hotspot=="Hotspot" & pboxplot$type=="SNV") |
-                                       (pboxplot$seqnames=='chr7' & c2n(pboxplot$start)>=55227950  &
-                                          c2n(pboxplot$start)<=55249171 &
-                                          (pboxplot$Baseref=="DEL" | pboxplot$Baseref=="INS"))
-      ),]
-      )
-      samplenoise[xx[which(xx %in% xxx & xx %in% xxxx)],'outlier']="outlier_hotspot"
-      outlier=length(xx[which(xx %in% xxx & xx %in% xxxx)])
-    }
-
-    # 2.First outlier detection
     samplenoise[which(samplenoise$chrpos %in% find.outliers(samplenoise$hprob, samplenoise$chrpos)),'outlier']="outlier"
     nb.outliers=length(samplenoise$outlier[which(samplenoise$outlier!="no")])
+
+    ### Second, we deal now with Hotspots on the smallest p-values
+    # find the 250 smallest p-values
+    ind = order(samplenoise$hprob, decreasing=FALSE)[1:min(250,nrow(samplenoise))]
+    small.pval = samplenoise[ind,'hprob']
+    log.small.pval = minus.logit(small.pval)
+    #
+    # find the upper outliers of a robust boxplot of the finite logit p-values
+    upper.wisker = robustbase::adjbox(log.small.pval[is.finite(log.small.pval)], plot=F)$stats[5,1]
+    uppers = ind[log.small.pval > upper.wisker]
+    for (q in uppers) {
+      was.outlier = (samplenoise[q,'outlier']!='no')
+      if (samplenoise$type[q]=='SNV' & samplenoise$hotspot[q]=='Hotspot') samplenoise[q,'outlier']="outlier_hotspot"
+      if (samplenoise$type[q]!='SNV')
+        for (pos in hotspot.indel) { # check if the position is a known indel hotspot positions
+          tmp = regmatches(pos,gregexpr(':',pos),invert=T)[[1]]
+          if (samplenoise$seqnames[q]==tmp[1] & c2n(samplenoise$start[q])>=c2n(tmp[2]) & c2n(samplenoise$start[q])<=c2n(tmp[3]))
+            samplenoise[q,'outlier']="outlier_hotspot"
+        }
+      if (!was.outlier & samplenoise[q,'outlier']=="outlier_hotspot") nb.outliers=nb.outliers+1
+    }
 
     write.table(samplenoise, file=patient.hit, quote=FALSE, sep="\t", row.names=FALSE, col.names=TRUE)
     mutations = samplenoise[which(samplenoise$outlier!='no'),c('chrpos','type','Baseref','Basemut','Freq','hotspot','hprob')]
     colnames(mutations) = c('Genomic pos','Mutation type','Base ref','Base mut','Allelic freq','hotspot','p-value')
     write.table(mutations, file=patient.mut, quote=FALSE, sep="\t", row.names=FALSE, col.names=TRUE)
 
-    # For plotting purpose, we add all possible types of mutations so that the legend is consistent on all samples, mutated or not
+    ### For plotting purpose: all possible mutation types are added for legend consistency
     rownames(samplenoise) = 1:nrow(samplenoise)
-#     samplenoise$hotspot = factor(samplenoise$hotspot,levels=c('hotspot','non-hotspot'))
-#     samplenoise$outlier = factor(samplenoise$outlier,levels=c('outlier','no','outlier_hotspot'))
-#     samplenoise$outlier = factor(samplenoise$type,levels=c('deletion','insertion','snv'))
     samplenoise[nrow(samplenoise)+1,c('hotspot','outlier','type')]=c('Hotspot','outlier','deletion')
     samplenoise[nrow(samplenoise)+1,c('hotspot','outlier','type')]=c('Non-hotspot','no','insertion')
     samplenoise[nrow(samplenoise)+1,c('hotspot','outlier','type')]=c('Non-hotspot','outlier_hotspot','insertion')
+
+    ### For plotting pupose: make type and outlier as.factor with ordered levels
     USNT = unique(samplenoise$type) # YVES 5/09/2016
     samplenoise$type = factor(samplenoise$type, levels = USNT[order(USNT, decreasing=TRUE)]) # YVES 5/09/2016
-    # samplenoise$type = factor(samplenoise$type, levels = samplenoise$type[order(samplenoise$type, decreasing=TRUE)])
     USNO = unique(samplenoise$outlier) # YVES 5/09/2016
     samplenoise$outlier = factor(samplenoise$outlier, levels = USNO[order(USNO)]) # YVES 5/09/2016
-    # samplenoise$outlier = factor(samplenoise$outlier, levels = samplenoise$outlier[order(samplenoise$outlier)])
 
-    # The final plot is generated using package ggplot2
+    ### Plot generation using ggplot2
     grob = grobTree(textGrob(paste0("Mean Depth of Coverage: ", floor(depth),"x"),
                              x=0.45,  y=0.97, hjust=0, gp=gpar(col="red", fontsize=9, fontface="italic")))
 
     show.pos = (samplenoise$outlier=="outlier_hotspot" | samplenoise$outlier=="outlier")
     if (show.more)
-      show.pos = show.pos | ((samplenoise$hotspot=="Hotspot" | samplenoise$Baseref=="DEL" | samplenoise$Baseref=="INS") & samplenoise$hprob<0.00001 & samplenoise$hSB < 0.75 & samplenoise$hSB > 0.25)
+      show.pos = show.pos | ((samplenoise$hotspot=="Hotspot" | samplenoise$Baseref=="DEL" | samplenoise$Baseref=="INS") & samplenoise$hprob<0.000001 & samplenoise$hSB <= 1-cutoff.sb.ref & samplenoise$hSB >= cutoff.sb.ref)
 
     ind = rev(gregexpr('/',patient.name)[[1]])[1]
+    Freq4plot = substr(paste(samplenoise$Freq), 0, 6) # keep 3 decimal for the frequency of the mutation
     pdf = ggplot(samplenoise, aes(sapply(samplenoise$hprob, function(x) -log(max(1e-300,x))), samplenoise$hSB)) +
       geom_point(aes(colour=samplenoise$hotspot, size=samplenoise$outlier, shape=samplenoise$type), na.rm=T) +
       geom_text(aes(label=ifelse(show.pos,
-                                  paste0(as.character(samplenoise$chrpos),".",samplenoise$Baseref,">",samplenoise$Basemut, " AF ", Freq4plot),
-                                  '')),hjust=0, vjust=0.5, angle=65, size=2.5, na.rm=T)  +
+            paste0(as.character(samplenoise$chrpos),".",samplenoise$Baseref,">",samplenoise$Basemut, " AF ", Freq4plot),
+            '')),hjust=0, vjust=0.5, angle=65, size=2.5, na.rm=T)  +
       ylab("Strand Biais") + xlab(paste0("-log(p-value)")) + theme_set(theme_bw(base_size = 10)) +
       labs(title = paste(nb.outliers,"Outlier(s)", "\n", substr(patient.name, ind+1, ind+26))) + scale_y_continuous(limits=c(0, 1.0))  +
       scale_x_continuous(limits=c(0, 10e2) ) + annotation_custom(grob) + scale_shape_manual(name="Class", values = c(16, 25, 17)) +
@@ -912,9 +973,7 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
     # Export results plot and table
     ggsave(pdf, filename=patient.pdf, width = 10, height = 10)
 
-    samplenoise = NULL
-
-  }
+  } # end of loop over patients
 
   length(patient.files)
 
