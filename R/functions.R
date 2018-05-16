@@ -67,10 +67,6 @@ sbscore = function(refplus, refmin, altplus, altmin) {
   log( rmM(refplus,refmin)/rmM(altplus,altmin) * (z+1/z) )
 }
 
-minus.logit = function(P) {
-  sapply(P,function(x) {if (!is.nan(x)&(x<1)) return(-log(x/(1-x))) else return(-Inf)})
-  }
-
 pvalue = function(E,N=NULL,E0=NULL,N0=NULL,with.info=FALSE,use.int=TRUE) {
   # return the pvalue
   if (is.null(N)) {N=E[2]; E0=E[3]; N0=E[4]; E=E[1]}
@@ -87,10 +83,13 @@ pvalue = function(E,N=NULL,E0=NULL,N0=NULL,with.info=FALSE,use.int=TRUE) {
 }
 
 
+minus.logit = function(P) {
+  sapply(P,function(x) {if ((!is.nan(x))&(x<1)) return(-log(x/(1-x))) else return(-Inf)})
+}
+
 find.outliers = function(P,chr.pos,thr.R=6.5,thr.P=0.000001,with.info=FALSE) {
 
   P[which(P==1)]=0.9999999999 ### just to have finite values
-  P[which(P==0)]=0.0000000001 ### just to have finite values
   nP = length(P)
   names(P) = chr.pos
   L.tri = sort(minus.logit(P))
@@ -99,7 +98,7 @@ find.outliers = function(P,chr.pos,thr.R=6.5,thr.P=0.000001,with.info=FALSE) {
   L.left = L.tri[-nP];
   sL.sqrt=sign(L.left)*(abs(L.left))^0.5 # to take the square root without changing the sign
   Ratio = dL/sL.sqrt
-  outliers = which( Ratio>thr.R & L.right>minus.logit(thr.P))
+  outliers = which( (Ratio>thr.R) & (L.right>minus.logit(thr.P)))
 
   ### ADD YVES 29/03/2016
   # if (length(outliers)>0) outliers = which(L.right>=min(L.right[min(outliers)]))
@@ -118,6 +117,12 @@ find.outliers = function(P,chr.pos,thr.R=6.5,thr.P=0.000001,with.info=FALSE) {
   ind
 }
 
+UpperPart = function(values,q) {
+  # Find the locations inside a set of values higher than an upper quantile of these values
+  # Return the indices of the highest values, larger than the given quantile
+  noisy = which(values > quantile(values,q))
+  noisy
+}
 
 pileupFreq = function(pileupres) {
   nucleotides = levels(pileupres$nucleotide)
@@ -568,7 +573,7 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
   # ctrl.files = dir(paste0(ctrl.dir,'BER'), pattern="*.txt$", full.names=TRUE) # list all Background Error Rate files # before 1.6.5
 
   ### Assemble background errors from control samples
-  X = read.table(ctrl.files[1], header=TRUE, sep=" ")
+  All = X = read.table(ctrl.files[1], header=TRUE, sep=" ")
 
   ### utility function
   ATGC.ind = which(colnames(X) %in% c('A','T','G','C'))
@@ -585,7 +590,18 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
     Y = read.table(ctrl.files[g],header=T,sep=" ")
     X = merge(Y,X,by="chrpos",all=TRUE,suffixes=c(as.character(g),''))
     MAJ = merge(fct.MAJ(Y),MAJ,by='chrpos',all=TRUE,suffixes=c(as.character(g),''))
+    All.plus = merge(All,subset(Y,select='chrpos'),by='chrpos',all=TRUE,suffixes=c('',as.character(g)))[,colnames(All)]
+    Y.plus = merge(subset(All,select='chrpos'),Y,by='chrpos',all=TRUE,suffixes=c('',as.character(g)))[,colnames(All)]
+    for (j in colnames(All.plus))
+      if (is.numeric(All.plus[,j]) & j!='start') {
+        All.plus[is.na(All.plus[,j]),j] = 0
+        Y.plus[is.na(Y.plus[,j]),j] = 0
+        All[,j] = All.plus[,j] + Y.plus[,j]
+      }
   }
+  for (j in c('A','T','G','C','N'))
+    All[,paste0(j,'_SB')] = All[,paste0(j,'_plus')]/All[,j]
+  All = All[,c('chrpos','A','T','G','C','N',paste0(c('A','T','G','C','N'),'_SB'))]
 
   ok = (X$chrpos %in% pos_ind)
   not.ok = (X$chrpos %in% pos_snp)
@@ -593,24 +609,14 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
   X = X[!not.ok,] #### ensure to remove SNP positions and background error rate for SNPs (E0) and INDELS (E0indel) in samples
   MAJ = MAJ[ok,]
   MAJ = MAJ[!not.ok,]
-  # print(X[X$chrpos=='chr6:170530538',])
-  # print(X[X$chrpos=='chr10:39080921',])
+  All = All[ok,]
+  All = All[!not.ok,]
 
   X.col = colnames(X)
   col.cov = grep('cov',X.col) # column indexes of the coverture
   col.del = grep('longdel($|[^_])',X.col) # column indexes of the longdel
   col.ins = grep('longins($|[^_])',X.col) # column indexes of the longins
   col.maj = grep('^maj',X.col) # column indexes of the major
-
-  #### Check for good coverage
-  # not.good.coverage = apply(X[,col.cov],1,function(x) which(is.na(x)))
-  # print(not.good.coverage[1:3])
-  # for (i in 1:length(not.good.coverage))
-  #   if (length(not.good.coverage[[i]])>0) {
-  #     print(paste('PROBLEM at positions',X$chrpos[i],'in MAF/BER :'))
-  #     print(not.good.coverage[[i]])
-  #     print(ctrl.files[not.good.coverage[[i]]])
-  #   }
 
   sum.no.na = function(x) sum(x,na.rm=TRUE)
   q95 = function(x) quantile(x,0.95,na.rm=TRUE)
@@ -620,10 +626,12 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
 
   X = X[which(!is.na(N0) | N0 > 5000),]  # Remove genomic positions which are not covered in all control samples or with sum of depths < 5,000x
   MAJ = MAJ[which(!is.na(N0) | N0 > 5000),]
+  All = All[which(!is.na(N0) | N0 > 5000),]
 
   REF = apply(MAJ,1,function(x) names(which.max(table(as.character(x[-1])))))
   MAJ$the.ref = REF
   write.table(MAJ, file='MAJ.txt', row.names=FALSE, col.names=TRUE)
+  write.table(All, file='All.txt', row.names=FALSE, col.names=TRUE)
 
   ### SNV rates
   p.sain = E0/N0 # Control SNV Position-Error Rate
@@ -637,6 +645,7 @@ BuildCtrlErrorRate = function(ctrl.dir='Plasma ctrl/',bai.ext='.bai',pos_ranges.
   # Joint dataframe containing Control SNV and INDEL Position-Error Rate together with their 95th percentile, and the raw counts data
   chrpos = as.character(X$chrpos)
   background_error_rate = data.frame(cbind(chrpos,N0,E0,p.sain,up.sain,E0indel,indel.p.sain,indel.up.sain,REF))
+  # background_error_rate = merge(background_error_rate,All,by='chrpos',all=TRUE) # Does not work
 
   # Precise what are the hotspot positions
   background_error_rate$hotspot = 'Non-hotspot'
@@ -695,20 +704,6 @@ LoadBackgroundErrorRate = function(pos_ranges.file,ber.ctrl.file,n.trim) {
 
   background_error_rate = subset(background_error_rate,chrpos %in% pos_ind)
   background_error_rate
-}
-
-#' function UpperPart
-#'
-#' Find the locations inside a set of values higher than an upper quantile of these values
-#'
-#' @param values, numeric, the set of values
-#' @param q, the upper quantile
-#'
-#' @return the indices of the highest values, larger than the given quantile
-#'
-UpperPart = function(values,q) {
-  noisy = which(values > quantile(values,q))
-  noisy
 }
 
 
@@ -795,7 +790,11 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
     INDEL = colnames(sample)[INDEL.ind]
 
     ### merge control and sample counts
-    samplenoise = merge(sample, background_error_rate, by="chrpos", all=FALSE)
+    samplenoise = merge(sample, background_error_rate, by="chrpos", all=FALSE, suffixes=c('','.b'))
+
+    ### Compute p-values
+    samplenoise$probSNV = apply(cbind(c2n(samplenoise$MA),c2n(samplenoise$cov),c2n(samplenoise$E0),c2n(samplenoise$N0)),1, pvalue) # for SNV
+    samplenoise$probINDEL = apply(cbind(c2n(samplenoise$longINDEL),c2n(samplenoise$cov),c2n(samplenoise$E0indel),c2n(samplenoise$N0)),1, pvalue) # for INDEL
 
     ### local function made out of samplenoise
     FindColumn = function(i,cols.ind,col.ref,col.names=NULL){
@@ -808,19 +807,19 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
       ind
     }
 
-    ### Compute p-values
-    samplenoise$probSNV = apply(cbind(c2n(samplenoise$MA),c2n(samplenoise$cov),c2n(samplenoise$E0),c2n(samplenoise$N0)),1, pvalue) # for SNV
-    samplenoise$probINDEL = apply(cbind(c2n(samplenoise$longINDEL),c2n(samplenoise$cov),c2n(samplenoise$E0indel),c2n(samplenoise$N0)),1, pvalue) # for INDEL
-
     ### At each position, start by using SNV reference as default values:
     samplenoise[,'type'] = 'SNV'
     samplenoise[,'hprob'] = samplenoise[,'probSNV']
+
     ### Identify the REFERENCE allele and the mutated allele:
+    samplenoise$Baseref = samplenoise$Basemut = NA
     for (q in 1:nrow(samplenoise)) {
       samplenoise$Baseref[q] = FindColumn(q,ATGC.ind,'maj',ATGC)
       samplenoise$Basemut[q] = FindColumn(q,ATGC.ind,'MA',ATGC)
       # ### 1.7.0 : to deal with tumoral fraction higher than 50%
       if (as.character(samplenoise$Basemut[q])==as.character(samplenoise$REF[q])) {
+        print(paste('Inversion of reference at position',samplenoise$chrpos[q]))
+        print(samplenoise[q,])
         samplenoise$Basemut[q] = as.character(samplenoise$Baseref[q])
         samplenoise$Baseref[q] = as.character(samplenoise$REF[q])
         samplenoise$probSNV[q] = pvalue(c2n(samplenoise$maf[q]),c2n(samplenoise$cov[q]),c2n(samplenoise$E0[q]),c2n(samplenoise$N0[q]))
@@ -838,6 +837,9 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
     ### At each position, compute Strand Bias scores for ref, major variant and indel
     for (q in 1:nrow(samplenoise)) {
       ### compute reference strand bias
+      # print(paste('q =',q))
+      # print(paste0(samplenoise[q,'Baseref'],"_SB"))
+      # print(samplenoise[q,])
       samplenoise[q,'SBref'] = samplenoise[q,paste0(samplenoise[q,'Baseref'],"_SB")]
       refplus = samplenoise[q,paste0(samplenoise[q,'Baseref'],'_plus')]
       refmin = samplenoise[q,paste0(samplenoise[q,'Baseref'],'_minus')]
@@ -899,17 +901,20 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
     samplenoise[which(type.snv & samplenoise$chrpos %in% noisy.snv ), 'hprob'] = NA
     samplenoise[which(!type.snv & samplenoise$chrpos %in% noisy.indel), 'hprob'] = NA
 
+
     ### keep non removed positions (hprob not NA)
     samplenoise = samplenoise[-which(is.na(samplenoise$hprob)),]
-    type.snv = (samplenoise$type == 'SNV')
 
     ### compute the frequency of the mutation
-    samplenoise[type.snv,'Freq'] = samplenoise[type.snv,'MA']/samplenoise[type.snv,'cov']
-    samplenoise[!type.snv,'Freq'] = samplenoise[!type.snv,'longINDEL']/samplenoise[!type.snv,'cov']
+    type.snv = (samplenoise$type == 'SNV')
+    ind = which(type.snv)
+    samplenoise[ind,'Freq'] = samplenoise[ind,'MA']/samplenoise[ind,'cov'] # compute the frequency of the mutation
+    ind = which(!type.snv)
+    samplenoise[ind,'Freq'] = samplenoise[ind,'longINDEL']/samplenoise[ind,'cov'] # compute the frequency of the mutation
 
     ### First outlier detection
     samplenoise$outlier="no"
-    samplenoise[which(samplenoise$chrpos %in% find.outliers(samplenoise$hprob, samplenoise$chrpos)),'outlier']="outlier"
+    samplenoise[which(samplenoise$chrpos %in% find.outliers(samplenoise$hprob, samplenoise$chrpos)),'outlier']="outlier"  ##### <<<< PB
     nb.outliers=length(samplenoise$outlier[which(samplenoise$outlier!="no")])
 
     ### Second, we deal now with Hotspots on the smallest p-values
