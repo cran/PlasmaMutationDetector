@@ -20,6 +20,7 @@
 # release 1.6.4 : save file in tempdir() by default to satisfy CRAN policy e.g. for debian distribution
 # release 1.6.5 : debug 1.6.4
 # release 1.7.0 : take care of mutations showing allele frequency larger than 50% // clean the code
+# release 1.7.1 : bug correction in find.outliers
 
 # #' @importFrom GenomicRanges GRanges
 #' @importClassesFrom S4Vectors FilterRules
@@ -90,15 +91,19 @@ minus.logit = function(P) {
 find.outliers = function(P,chr.pos,thr.R=6.5,thr.P=0.000001,with.info=FALSE) {
 
   P[which(P==1)]=0.9999999999 ### just to have finite values
-  nP = length(P)
   names(P) = chr.pos
+  ind.null = P==0
+  P.null = P[which(ind.null)]
+  P = P[which(!ind.null)]
+  nP = length(P)
   L.tri = sort(minus.logit(P))
   dL = diff(L.tri);
   L.right = L.tri[-1];
   L.left = L.tri[-nP];
-  sL.sqrt=sign(L.left)*(abs(L.left))^0.5 # to take the square root without changing the sign
+  sL.sqrt = sign(L.left)*(abs(L.left))^0.5 # to take the square root without changing the sign
   Ratio = dL/sL.sqrt
-  outliers = which( (Ratio>thr.R) & (L.right>minus.logit(thr.P)))
+
+  outliers = c(which( (Ratio>thr.R) & (L.right>minus.logit(thr.P))),P.null)
 
   ### ADD YVES 29/03/2016
   # if (length(outliers)>0) outliers = which(L.right>=min(L.right[min(outliers)]))
@@ -197,7 +202,7 @@ pileupFreq = function(pileupres) {
 PrepareLibrary = function(info.dir='Info/',
                           bed.filename='lungcolonV2.bed.txt', # amplicon positions
                           snp.filename='ExAC.r0.3.sites.vep.vcf.gz', # known snp
-                          snp.extra=c("chr4:1807909","chr7:140481511", "chr18:48586344", "chr14:105246474", "chr19:1223055"), # extra snp
+                          snp.extra=c("chr2:212812097", "chr4:1807909", "chr7:140481511", "chr14:105246474", "chr18:48586344", "chr19:1223055"), # extra snp
                           output.name='positions_ranges.rda',
                           output.dir=info.dir,
                           load.from.broad.insitute=FALSE
@@ -812,17 +817,16 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
     samplenoise[,'hprob'] = samplenoise[,'probSNV']
 
     ### Identify the REFERENCE allele and the mutated allele:
-    samplenoise$Baseref = samplenoise$Basemut = NA
+    samplenoise$Baseref = sapply(1:nrow(samplenoise),FindColumn,ATGC.ind,'maj',ATGC)
+    samplenoise$Basemut = sapply(1:nrow(samplenoise),FindColumn,ATGC.ind,'MA',ATGC)
     for (q in 1:nrow(samplenoise)) {
-      samplenoise$Baseref[q] = FindColumn(q,ATGC.ind,'maj',ATGC)
-      samplenoise$Basemut[q] = FindColumn(q,ATGC.ind,'MA',ATGC)
       # ### 1.7.0 : to deal with tumoral fraction higher than 50%
       if (as.character(samplenoise$Basemut[q])==as.character(samplenoise$REF[q])) {
-        print(paste('Inversion of reference at position',samplenoise$chrpos[q]))
         print(samplenoise[q,])
+        print(paste('Inversion of reference at position',samplenoise$chrpos[q]))
         samplenoise$Basemut[q] = as.character(samplenoise$Baseref[q])
         samplenoise$Baseref[q] = as.character(samplenoise$REF[q])
-        samplenoise$probSNV[q] = pvalue(c2n(samplenoise$maf[q]),c2n(samplenoise$cov[q]),c2n(samplenoise$E0[q]),c2n(samplenoise$N0[q]))
+        samplenoise$hprob[q] = samplenoise$probSNV[q] = pvalue(c2n(samplenoise$maj[q]),c2n(samplenoise$cov[q]),c2n(samplenoise$E0[q]),c2n(samplenoise$N0[q]))
       }
     }
 
@@ -922,6 +926,7 @@ DetectPlasmaMutation = function(patient.dir='./',patient.name=NULL,pos_ranges.fi
     ind = order(samplenoise$hprob, decreasing=FALSE)[1:min(250,nrow(samplenoise))]
     small.pval = samplenoise[ind,'hprob']
     log.small.pval = minus.logit(small.pval)
+
     #
     # find the upper outliers of a robust boxplot of the finite logit p-values
     upper.wisker = robustbase::adjbox(log.small.pval[is.finite(log.small.pval)], plot=F)$stats[5,1]

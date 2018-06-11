@@ -5,8 +5,9 @@
 \title{function PrepareLibrary}
 \usage{
 PrepareLibrary(info.dir = "Info/", bed.filename = "lungcolonV2.bed.txt",
-  snp.filename = "ExAC.r0.3.sites.vep.vcf.gz", snp.extra = c("chr4:1807909",
-  "chr7:140481511", "chr18:48586344", "chr14:105246474", "chr19:1223055"),
+  snp.filename = "ExAC.r0.3.sites.vep.vcf.gz",
+  snp.extra = c("chr2:212812097", "chr4:1807909", "chr7:140481511",
+  "chr14:105246474", "chr18:48586344", "chr19:1223055"),
   output.name = "positions_ranges.rda", output.dir = info.dir,
   load.from.broad.insitute = FALSE)
 }

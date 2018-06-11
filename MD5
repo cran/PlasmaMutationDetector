@@ -1,7 +1,7 @@
-1c83c2681e52721d810bc50bc8511924 *DESCRIPTION
+85bb89fa59ae2ddaf4824edb1d287bea *DESCRIPTION
 9aae110e72ac781cd7369a55cef4bc81 *LICENSE
 146a26bfebec0f5b88acdf24c35571a0 *NAMESPACE
-5e1f396d3a75d27219aae65bc70853a2 *R/functions.R
+78fa153faa45a9c9b7b9e86941d84ccb *R/functions.R
 346bad75691bbf10001cfca810c016db *data/background_error_rate.txt.gz
 1e907f6e12e071b7086b30c1b856727d *data/hotspot.txt.gz
 47c4d77a23f5a94edfc77fe8fb766d56 *data/positions_ranges.rda
@@ -16,7 +16,7 @@ dfdd27b7a0839c9782e3cfa175a5be30 *man/BuildCtrlErrorRate.Rd
 e474c2e6538a92777a0b3744b7482fdc *man/DetectPlasmaMutation.Rd
 49aa42d5a32d3341291b022f3d0c0996 *man/LoadBackgroundErrorRate.Rd
 dd493b3c303e7e6fce728f09e5a314ad *man/MAF_from_BAM.Rd
-5a8680e3cfac152b97da6bfa40cc90b6 *man/PrepareLibrary.Rd
+ac9cc2c22605cd88a21aafc00fdfb247 *man/PrepareLibrary.Rd
 2dde7cbbb026ad81b3da9aba8ed99e63 *man/background_error_rate.Rd
 fc0e676c78d059faf595c48a76786ba3 *man/hotspot.Rd
 c75097dff3f58b4b3e4468921743f01e *man/positions_ranges.Rd

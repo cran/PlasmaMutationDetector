@@ -1,7 +1,7 @@
 Package: PlasmaMutationDetector
 Type: Package
 Title: Tumor Mutation Detection in Plasma
-Version: 1.7.1
+Version: 1.7.2
 Date: 2018-05-16
 Author: Yves Rozenholc, Nicolas Pécuchet, Pierre Laurent-Puig
 Maintainer: Yves Rozenholc <yves.rozenholc@parisdescartes.fr>
@@ -20,6 +20,6 @@ Encoding: UTF-8
 RoxygenNote: 6.0.1
 LazyData: true
 NeedsCompilation: no
-Packaged: 2018-05-16 01:11:57 UTC; rozen
+Packaged: 2018-06-11 02:11:42 UTC; rozen
 Repository: CRAN
-Date/Publication: 2018-05-16 03:31:59 UTC
+Date/Publication: 2018-06-11 07:43:09 UTC
